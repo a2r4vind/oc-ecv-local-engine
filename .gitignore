@@ -1,0 +1,31 @@
+# Frontend (Tauri + React + Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
+frontend/src-tauri/binaries/*.exe
+frontend/src-tauri/binaries/*-x86_64-*
+frontend/src-tauri/gen/
+
+# Backend (Python)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/.spyproject/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+
+# Generic hygiene (carried over from Tauri default)
+*.local
+.idea
+*.sw?
+
+# PyInstaller build artifacts (regenerate via `pyinstaller`, don't commit)
+backend/build/
+backend/dist/
+backend/*.spec
+
+# Spyder project metadata (local IDE config, not project source)
+.spyproject/
