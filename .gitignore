@@ -29,3 +29,8 @@ backend/*.spec
 
 # Spyder project metadata (local IDE config, not project source)
 .spyproject/
+
+# Sample/test data files (regenerate via generate_sample_data.py or
+# download_sample_real_data.py — don't commit binary data to git)
+backend/real_sample_data/
+backend/*.nc

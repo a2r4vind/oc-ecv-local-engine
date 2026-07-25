@@ -14,9 +14,17 @@ this must never be reachable from outside the local machine.
 """
 
 import sys
+from pathlib import Path
+
+# Ensure backend/ is on sys.path so `ingestion` resolves as a package,
+# regardless of the working directory this script is launched from.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+from ingestion.netcdf_reader import parse_file, IngestionError
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
 
@@ -75,6 +83,21 @@ def diagnostics():
         results["xarray_error"] = str(e)
 
     return results
+
+@app.get("/ingest")
+def ingest_file(path: str):
+    """
+    Parses a local NetCDF / HDF file and returns its metadata, ECV variable
+    classification, and validation results. 'path' is an absolute file
+    path selected via the frontend's file dialog (Day 5's drag and drop
+    uploader will pass this through).
+    """
+    
+    try:
+        result = parse_file(path)
+        return result
+    except IngestionError as e:
+        return {"error": str(e)}
 
 
 if __name__ == "__main__":
