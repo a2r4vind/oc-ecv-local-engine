@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import json
 
 from ingestion.netcdf_reader import parse_file, IngestionError
 
@@ -95,7 +96,13 @@ def ingest_file(path: str):
     
     try:
         result = parse_file(path)
-        return result
+        result = parse_file(path)
+        # Sanitize any non-JSON-native types (e.g. numpy scalars in global
+        # attributes from real satellite files) before FastAPI serializes
+        # the response — mirrors the `default=str` fallback already used
+        # in the CLI entrypoint.
+        safe_result = json.loads(json.dumps(result, default=str))
+        return safe_result
     except IngestionError as e:
         return {"error": str(e)}
 

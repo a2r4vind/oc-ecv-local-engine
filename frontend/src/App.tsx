@@ -1,6 +1,7 @@
 import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
+import FileUploader from "./components/FileUploader/FileUploader";
 import "./App.css";
 
 function App() {
@@ -15,7 +16,6 @@ function App() {
   return (
     <main className="container">
       <h1>Welcome to Tauri + React</h1>
-
       <div className="row">
         <a href="https://vite.dev" target="_blank">
           <img src="/vite.svg" className="logo vite" alt="Vite logo" />
@@ -28,7 +28,6 @@ function App() {
         </a>
       </div>
       <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
       <form
         className="row"
         onSubmit={(e) => {
@@ -44,6 +43,11 @@ function App() {
         <button type="submit">Greet</button>
       </form>
       <p>{greetMsg}</p>
+
+      <hr style={{ margin: "2rem 0" }} />
+
+      <h2>OC-ECV File Ingestion</h2>
+      <FileUploader />
     </main>
   );
 }

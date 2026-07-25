@@ -14,7 +14,8 @@
       {
         "title": "oc-ecv-local_engine",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "dragDropEnabled": true
       }
     ],
     "security": {

@@ -1,0 +1,89 @@
+.file-uploader {
+  max-width: 640px;
+  margin: 2rem auto;
+  font-family: inherit;
+}
+
+.drop-zone {
+  border: 2px dashed #888;
+  border-radius: 8px;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.drop-zone.drag-over {
+  border-color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.drop-zone-or {
+  margin: 0.5rem 0;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.drop-zone button {
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.status-line {
+  margin-top: 1rem;
+  text-align: center;
+  color: #666;
+}
+
+.error-box {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.result-panel {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.result-panel h3 {
+  margin-top: 0;
+  word-break: break-all;
+}
+
+.result-panel p {
+  margin: 0.4rem 0;
+  font-size: 0.9rem;
+}
+
+.valid-tag {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.invalid-tag {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.issue-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+}
+
+.issue-list.errors li {
+  color: #b91c1c;
+}
+
+.issue-list.warnings li {
+  color: #b45309;
+}
