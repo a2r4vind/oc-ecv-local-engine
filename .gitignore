@@ -34,3 +34,6 @@ backend/*.spec
 # download_sample_real_data.py — don't commit binary data to git)
 backend/real_sample_data/
 backend/*.nc
+
+# Batch test data (regenerate via download_batch_real_data.py)
+backend/real_batch_data/
