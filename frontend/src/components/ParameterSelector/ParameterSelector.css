@@ -1,0 +1,91 @@
+.parameter-selector {
+  max-width: 640px;
+  margin: 1.5rem auto 2rem;
+  text-align: left;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+
+.field-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.field-group select {
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+}
+
+fieldset {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0 0 1rem;
+}
+
+legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.4rem;
+  color: #555;
+}
+
+.bbox-grid,
+.date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.bbox-grid label,
+.date-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: #444;
+}
+
+.bbox-grid input,
+.date-grid input {
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+}
+
+.temporal-note {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+  margin: 0 0 1rem;
+}
+
+.validation-error {
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-size: 0.85rem;
+}
+
+.parameter-selector button[type="submit"] {
+  padding: 0.55rem 1.4rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+}

@@ -4,7 +4,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ingestFile, type IngestionResult } from "../../services/backendApi";
 import "./FileUploader.css";
 
-export default function FileUploader() {
+interface FileUploaderProps {
+  onIngested?: (filePath: string, result: IngestionResult) => void;
+}
+
+export default function FileUploader({ onIngested }: FileUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IngestionResult | null>(null);
@@ -43,6 +47,7 @@ export default function FileUploader() {
         setErrorMsg(res.error);
       } else {
         setResult(res);
+        onIngested?.(filePath, res);
       }
     } catch (err) {
       setErrorMsg(

@@ -2,16 +2,41 @@ import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import FileUploader from "./components/FileUploader/FileUploader";
+import ParameterSelector, {
+  type QueryParams,
+} from "./components/ParameterSelector/ParameterSelector";
+import type { IngestionResult } from "./services/backendApi";
 import "./App.css";
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
   const [name, setName] = useState("");
 
+  const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
+  const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
+  const [lastQuery, setLastQuery] = useState<QueryParams | null>(null);
+
   async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     setGreetMsg(await invoke("greet", { name }));
   }
+
+  function handleIngested(filePath: string, result: IngestionResult) {
+    setIngestedFilePath(filePath);
+    setIngestedResult(result);
+    setLastQuery(null);
+  }
+
+  function handleQuerySubmit(params: QueryParams) {
+    // Day 15 will replace this with an actual call to a new backend
+    // statistics endpoint. For now, Days 12-14 scope is just building
+    // and validating the UI's ability to assemble a well-formed query.
+    setLastQuery(params);
+  }
+
+  const availableVariables =
+    ingestedResult?.metadata?.variables?.filter((v) => v !== "l2_flags") ?? [];
+
+  const supportsTemporalFilter = ingestedResult?.metadata?.structure === "flat_grid";
 
   return (
     <main className="container">
@@ -47,7 +72,37 @@ function App() {
       <hr style={{ margin: "2rem 0" }} />
 
       <h2>OC-ECV File Ingestion</h2>
-      <FileUploader />
+      <FileUploader onIngested={handleIngested} />
+
+      {ingestedFilePath && availableVariables.length > 0 && (
+        <>
+          <h2>Query Parameters</h2>
+          <ParameterSelector
+            key={ingestedFilePath}
+            filePath={ingestedFilePath}
+            availableVariables={availableVariables}
+            supportsTemporalFilter={supportsTemporalFilter}
+            onSubmit={handleQuerySubmit}
+          />
+        </>
+      )}
+
+      {lastQuery && (
+        <div style={{ maxWidth: 640, margin: "0 auto", textAlign: "left" }}>
+          <h3>Assembled Query (Day 15 will send this to the backend)</h3>
+          <pre
+            style={{
+              background: "#f5f5f5",
+              padding: "1rem",
+              borderRadius: 6,
+              fontSize: "0.85rem",
+              overflowX: "auto",
+            }}
+          >
+            {JSON.stringify(lastQuery, null, 2)}
+          </pre>
+        </div>
+      )}
     </main>
   );
 }
