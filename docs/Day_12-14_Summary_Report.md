@@ -39,5 +39,7 @@ Build the parameter-selection UI — dropdowns for ECVs, bounding-box inputs, an
 - Form correctly resets per loaded file, preventing stale query parameters from carrying over between files.
 - All Phase 2, Days 12-14 exit-criteria items met.
 
+**Post-completion enhancement:** added a clickable year picker to the custom calendar (click the year label to open a scrollable year-selection list spanning ~100 years back to 50 years ahead), letting users jump directly to a distant year instead of repeatedly clicking the month `‹`/`›` navigation — useful given historical satellite archives can span decades.
+
 ## 5. Next Steps (Day 15)
 Connect the UI's assembled query parameters to backend processing APIs — replacing the current JSON preview with an actual FastAPI endpoint call that invokes Day 11's `compute_regional_stats()` and renders real statistical results in the UI.
