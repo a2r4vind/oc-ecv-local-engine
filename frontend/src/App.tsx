@@ -5,7 +5,11 @@ import FileUploader from "./components/FileUploader/FileUploader";
 import ParameterSelector, {
   type QueryParams,
 } from "./components/ParameterSelector/ParameterSelector";
-import type { IngestionResult } from "./services/backendApi";
+import {
+  computeStats,
+  type IngestionResult,
+  type StatsResult,
+} from "./services/backendApi";
 import "./App.css";
 
 function App() {
@@ -14,7 +18,10 @@ function App() {
 
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
   const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
-  const [lastQuery, setLastQuery] = useState<QueryParams | null>(null);
+
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsResult, setStatsResult] = useState<StatsResult | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   async function greet() {
     setGreetMsg(await invoke("greet", { name }));
@@ -23,14 +30,39 @@ function App() {
   function handleIngested(filePath: string, result: IngestionResult) {
     setIngestedFilePath(filePath);
     setIngestedResult(result);
-    setLastQuery(null);
+    setStatsResult(null);
+    setStatsError(null);
   }
 
-  function handleQuerySubmit(params: QueryParams) {
-    // Day 15 will replace this with an actual call to a new backend
-    // statistics endpoint. For now, Days 12-14 scope is just building
-    // and validating the UI's ability to assemble a well-formed query.
-    setLastQuery(params);
+  async function handleQuerySubmit(params: QueryParams) {
+    setStatsLoading(true);
+    setStatsResult(null);
+    setStatsError(null);
+
+    try {
+      const result = await computeStats({
+        filePath: params.filePath,
+        variable: params.variable,
+        latMin: params.latMin,
+        latMax: params.latMax,
+        lonMin: params.lonMin,
+        lonMax: params.lonMax,
+        startDate: params.startDate,
+        endDate: params.endDate,
+      });
+
+      if (result.error) {
+        setStatsError(result.error);
+      } else {
+        setStatsResult(result);
+      }
+    } catch (err) {
+      setStatsError(
+        err instanceof Error ? `Could not reach backend: ${err.message}` : "Unknown error"
+      );
+    } finally {
+      setStatsLoading(false);
+    }
   }
 
   const availableVariables =
@@ -87,20 +119,56 @@ function App() {
         </>
       )}
 
-      {lastQuery && (
-        <div style={{ maxWidth: 640, margin: "0 auto", textAlign: "left" }}>
-          <h3>Assembled Query (Day 15 will send this to the backend)</h3>
-          <pre
-            style={{
-              background: "#f5f5f5",
-              padding: "1rem",
-              borderRadius: 6,
-              fontSize: "0.85rem",
-              overflowX: "auto",
-            }}
-          >
-            {JSON.stringify(lastQuery, null, 2)}
-          </pre>
+      {statsLoading && (
+        <p style={{ textAlign: "center" }}>Computing statistics…</p>
+      )}
+
+      {statsError && (
+        <div
+          style={{
+            maxWidth: 640,
+            margin: "1rem auto",
+            padding: "0.75rem 1rem",
+            borderRadius: 6,
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            color: "#b91c1c",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            textAlign: "left",
+          }}
+        >
+          ⚠ {statsError}
+        </div>
+      )}
+
+      {statsResult && !statsError && (
+        <div
+          style={{
+            maxWidth: 640,
+            margin: "1rem auto",
+            padding: "1rem 1.25rem",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            textAlign: "left",
+          }}
+        >
+          <h3>
+            Statistics: {statsResult.variable} ({statsResult.file_name})
+          </h3>
+          <p>
+            <strong>Valid pixels:</strong> {statsResult.valid_pixel_count} /{" "}
+            {statsResult.total_pixel_count} (
+            {((statsResult.valid_fraction ?? 0) * 100).toFixed(1)}%)
+          </p>
+          {statsResult.mean !== null && statsResult.mean !== undefined ? (
+            <>
+              <p><strong>Mean:</strong> {statsResult.mean.toFixed(4)}</p>
+              <p><strong>Min:</strong> {statsResult.min?.toFixed(4)}</p>
+              <p><strong>Max:</strong> {statsResult.max?.toFixed(4)}</p>
+              <p><strong>Std Dev:</strong> {statsResult.std?.toFixed(4)}</p>
+            </>
+          ) : (
+            <p>No valid pixels in this region — statistics unavailable.</p>
+          )}
         </div>
       )}
     </main>

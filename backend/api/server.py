@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jul 23 20:45:51 2026
-
-@author: akki2404
-"""
-
 """
 OC-ECV Local Engine — Backend Sidecar Entrypoint
 Runs a local-loopback-only FastAPI server that the Tauri shell invokes
@@ -14,18 +6,22 @@ this must never be reachable from outside the local machine.
 """
 
 import sys
+import json
 from pathlib import Path
+from typing import Optional
 
-# Ensure backend/ is on sys.path so `ingestion` resolves as a package,
-# regardless of the working directory this script is launched from.
+# Ensure backend/ is on sys.path so `ingestion`/`processing` resolve as
+# packages, regardless of the working directory this script is launched
+# from (matters both for `python api/server.py` and the PyInstaller-frozen binary).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import json
 
 from ingestion.netcdf_reader import parse_file, IngestionError
+from processing.statistics import compute_regional_stats, StatisticsError
+from processing.quality_mask import QualityMaskError
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
 
@@ -43,6 +39,16 @@ app.add_middleware(
 )
 
 
+def _sanitize(result: dict) -> dict:
+    """
+    Sanitizes any non-JSON-native types (e.g. numpy scalars) before
+    FastAPI serializes the response — same safety net used since Day 5,
+    since real satellite file metadata/values often include numpy types
+    that FastAPI's built-in encoder can't handle natively.
+    """
+    return json.loads(json.dumps(result, default=str))
+
+
 @app.get("/health")
 def health_check():
     """Sanity check endpoint — confirms the sidecar is alive and reachable."""
@@ -52,6 +58,7 @@ def health_check():
 @app.get("/version")
 def version():
     return {"python_version": sys.version, "engine": "oc-ecv-local-engine"}
+
 
 @app.get("/diagnostics")
 def diagnostics():
@@ -64,50 +71,72 @@ def diagnostics():
         results["gdal"] = gdal.__version__
     except Exception as e:
         results["gdal_error"] = str(e)
-
     try:
         import netCDF4
         results["netCDF4"] = netCDF4.__version__
     except Exception as e:
         results["netCDF4_error"] = str(e)
-
     try:
         import rasterio
         results["rasterio"] = rasterio.__version__
     except Exception as e:
         results["rasterio_error"] = str(e)
-
     try:
         import xarray
         results["xarray"] = xarray.__version__
     except Exception as e:
         results["xarray_error"] = str(e)
-
     return results
+
 
 @app.get("/ingest")
 def ingest_file(path: str):
     """
-    Parses a local NetCDF / HDF file and returns its metadata, ECV variable
-    classification, and validation results. 'path' is an absolute file
-    path selected via the frontend's file dialog (Day 5's drag and drop
-    uploader will pass this through).
+    Parses a local NetCDF/HDF file and returns its metadata, ECV variable
+    classification, and validation results. `path` is an absolute file
+    path selected via the frontend's file dialog.
     """
-    
     try:
         result = parse_file(path)
-        result = parse_file(path)
-        # Sanitize any non-JSON-native types (e.g. numpy scalars in global
-        # attributes from real satellite files) before FastAPI serializes
-        # the response — mirrors the `default=str` fallback already used
-        # in the CLI entrypoint.
-        safe_result = json.loads(json.dumps(result, default=str))
-        return safe_result
+        return _sanitize(result)
     except IngestionError as e:
         return {"error": str(e)}
 
 
+@app.get("/stats")
+def get_stats(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+):
+    """
+    Computes regional statistics (mean/min/max/std) for a variable over a
+    bounding box, with optional temporal filtering (flat-grid files) or
+    quality-flag masking (swath files) — the endpoint the Days 12-14
+    parameter-selection UI's "Run Query" button calls.
+
+    `quality_flags` is a comma-separated string (e.g. "LAND,CLDICE") since
+    query parameters are flat strings, not native lists.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+
+    try:
+        result = compute_regional_stats(
+            path, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+        return _sanitize(result)
+    except (StatisticsError, QualityMaskError, IngestionError) as e:
+        return {"error": str(e)}
+
+
 if __name__ == "__main__":
-    # Fixed port for now; Day 15+ (parameter-selection UI wiring) may need
-    # dynamic port allocation if port conflicts become an issue.
+    # Fixed port for now; may need dynamic port allocation later if port
+    # conflicts become an issue.
     uvicorn.run(app, host="127.0.0.1", port=5321, log_level="info")
