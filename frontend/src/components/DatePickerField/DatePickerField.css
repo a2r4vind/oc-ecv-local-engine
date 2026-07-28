@@ -65,6 +65,69 @@
   -webkit-appearance: none;
 }
 
+.month-year-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.year-toggle {
+  font-size: 0.85rem !important;
+  font-weight: 600;
+  padding: 0.05rem 0.3rem !important;
+  border-radius: 4px;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.year-toggle:hover {
+  background: #eee !important;
+}
+
+.year-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  width: 110px;
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0.3rem;
+}
+
+.year-option {
+  border: none;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  text-align: center;
+  border-radius: 4px;
+  font-family: inherit;
+  color: inherit;
+}
+
+.year-option:hover {
+  background: #eee;
+}
+
+.year-option.selected {
+  background: #3b82f6;
+  color: #fff;
+  font-weight: 600;
+}
+
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

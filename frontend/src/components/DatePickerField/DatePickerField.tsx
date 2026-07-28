@@ -21,17 +21,20 @@ function daysInMonth(year: number, month: number): number {
 
 export default function DatePickerField({ label, value, onChange }: DatePickerFieldProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isYearListOpen, setIsYearListOpen] = useState(false);
   const today = new Date();
   const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value) : today;
   const [viewYear, setViewYear] = useState(parsed.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed.getMonth());
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const yearListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
+        setIsYearListOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -61,12 +64,32 @@ export default function DatePickerField({ label, value, onChange }: DatePickerFi
     setIsOpen(false);
   }
 
+  function selectYear(year: number) {
+    setViewYear(year);
+    setIsYearListOpen(false);
+  }
+
   const firstWeekday = new Date(viewYear, viewMonth, 1).getDay();
   const totalDays = daysInMonth(viewYear, viewMonth);
-  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleString("default", {
+  const monthName = new Date(viewYear, viewMonth, 1).toLocaleString("default", {
     month: "long",
-    year: "numeric",
   });
+
+  // Wide enough range to cover historical satellite archives (e.g. MODIS
+  // data back to the early 2000s) through a couple decades ahead.
+  const YEAR_RANGE_START = today.getFullYear() - 100;
+  const YEAR_RANGE_END = today.getFullYear() + 50;
+  const yearOptions: number[] = [];
+  for (let y = YEAR_RANGE_END; y >= YEAR_RANGE_START; y--) {
+    yearOptions.push(y);
+  }
+
+  useEffect(() => {
+    if (isYearListOpen && yearListRef.current) {
+      const selectedEl = yearListRef.current.querySelector(".year-option.selected");
+      selectedEl?.scrollIntoView({ block: "center" });
+    }
+  }, [isYearListOpen]);
 
   const cells: (number | null)[] = [
     ...Array(firstWeekday).fill(null),
@@ -98,7 +121,31 @@ export default function DatePickerField({ label, value, onChange }: DatePickerFi
         <div className="calendar-popup">
           <div className="calendar-header">
             <button type="button" onClick={goToPrevMonth}>‹</button>
-            <span>{monthLabel}</span>
+            <span className="month-year-label">
+              <span>{monthName}</span>{" "}
+              <button
+                type="button"
+                className="year-toggle"
+                onClick={() => setIsYearListOpen((v) => !v)}
+              >
+                {viewYear}
+              </button>
+
+              {isYearListOpen && (
+                <div className="year-list" ref={yearListRef}>
+                  {yearOptions.map((y) => (
+                    <button
+                      type="button"
+                      key={y}
+                      className={"year-option" + (y === viewYear ? " selected" : "")}
+                      onClick={() => selectYear(y)}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
             <button type="button" onClick={goToNextMonth}>›</button>
           </div>
           <div className="calendar-weekdays">
