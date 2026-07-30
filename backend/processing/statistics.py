@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ingestion.netcdf_reader import open_dataset, _find_data_and_nav_groups, IngestionError
 from processing.quality_mask import get_flag_definitions, build_quality_mask, QualityMaskError
 from processing.parallel_utils import run_parallel
+from processing.temporal_filter import filter_files_by_date_range, TemporalFilterError
 
 
 class StatisticsError(Exception):
@@ -254,6 +255,70 @@ def compute_regional_stats_multivar(
         else:
             output[var] = result
     return output
+
+def compute_batch_timeseries(
+    directory: str,
+    variable: str,
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+    max_workers: int | None = None,
+    serialize_file_access: bool = True,
+) -> dict:
+    """Computes regional stats across every file in `directory` that falls
+    within [start_date, end_date] (via Day 9's filter_files_by_date_range),
+    building a time-series. Each file is independent — unlike Day 16's
+    multi-variable-same-file case, there's no shared file handle here, but
+    HDF5's thread-safety is a global library concern, not guaranteed to be
+    strictly per-file-scoped. `serialize_file_access` defaults to True as a
+    safe starting point; Day 17's empirical A/B test determines whether it
+    can be safely set to False for a real speedup."""
+
+        
+    try:
+        scan_result = filter_files_by_date_range(directory, start_date, end_date)
+    except TemporalFilterError as e:
+        raise StatisticsError(str(e)) from e
+
+    matched_paths = [
+        str(Path(directory) / m["file_name"]) for m in scan_result["matched_files"]
+    ]
+    if not matched_paths:
+        raise StatisticsError(f"No files in '{directory}' fall within [{start_date}, {end_date}]")
+
+    lock = _netcdf_file_lock if serialize_file_access else None
+
+    def _one(file_path):
+        if lock:
+            with lock:
+                return compute_regional_stats(
+                    file_path, variable, lat_min, lat_max, lon_min, lon_max,
+                    quality_flags=quality_flags,
+                )
+        return compute_regional_stats(
+            file_path, variable, lat_min, lat_max, lon_min, lon_max,
+            quality_flags=quality_flags,
+        )
+
+    raw_results = run_parallel(_one, matched_paths, max_workers=max_workers)
+
+    timeseries = []
+    for file_path, result, error in raw_results:
+        entry = {"file": Path(file_path).name}
+        if error is not None:
+            if "does not overlap" in str(error):
+                entry["skipped"] = True
+                entry["reason"] = str(error)
+            else:
+                entry["error"] = str(error)
+        else:
+            entry.update(result)
+        timeseries.append(entry)
+
+    timeseries.sort(key=lambda e: e["file"])
+    return {"variable": variable, "file_count": len(timeseries), "timeseries": timeseries}
 
 
 if __name__ == "__main__":

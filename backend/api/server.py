@@ -24,7 +24,7 @@ from ingestion.netcdf_reader import parse_file, IngestionError
 from processing.statistics import compute_regional_stats, StatisticsError
 from processing.quality_mask import QualityMaskError
 from processing.statistics import compute_regional_stats_multivar
-
+from processing.statistics import compute_batch_timeseries
 
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
@@ -162,6 +162,28 @@ def stats_multi(
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 
+@app.get("/batch-timeseries")
+def batch_timeseries(
+    directory: str,
+    variable: str,
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: str | None = None,
+    serialize_file_access: bool = True,
+):
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        result = compute_batch_timeseries(
+            directory, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+            serialize_file_access=serialize_file_access,
+        )
+        return json.loads(json.dumps(result, default=str))
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    
 if __name__ == "__main__":
     # Fixed port for now; may need dynamic port allocation later if port
     # conflicts become an issue.
