@@ -15,6 +15,7 @@ and Day 10's quality-flag masking into one orchestrated query.
 """
 
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ingestion.netcdf_reader import open_dataset, _find_data_and_nav_groups, IngestionError
 from processing.quality_mask import get_flag_definitions, build_quality_mask, QualityMaskError
+from processing.parallel_utils import run_parallel
 
 
 class StatisticsError(Exception):
@@ -211,6 +213,47 @@ def compute_regional_stats(
         stats["quality_flags_masked"] = quality_flags
 
     return stats
+
+_netcdf_file_lock = threading.Lock()
+
+def compute_regional_stats_multivar(
+    path: str,
+    variables: list[str],
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+    max_workers: int | None = None,
+) -> dict:
+    """
+    Runs compute_regional_stats() across multiple variables concurrently.
+    IMPORTANT: this conda-forge netCDF4/HDF5 build is NOT thread-safe for
+    concurrent reads of the same physical file — verified empirically on
+    Day 16 (repeated trials produced intermittent 'NetCDF: HDF error',
+    'Not a valid ID', and 'Can't open HDF5 attribute' failures under real
+    concurrency). A module-level lock serializes the entire open-through-
+    compute call per variable, eliminating the race. Profiling showed
+    threading gives no meaningful speedup here anyway (I/O-bound, ~1.1x
+    at best), so this trades away no real performance.
+    """
+
+    def _one(var):
+        with _netcdf_file_lock:
+            return compute_regional_stats(
+                path, var, lat_min, lat_max, lon_min, lon_max,
+                start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+            )
+
+    raw_results = run_parallel(_one, variables, max_workers=max_workers)
+
+    output = {}
+    for var, result, error in raw_results:
+        if error is not None:
+            output[var] = {"error": str(error)}
+        else:
+            output[var] = result
+    return output
 
 
 if __name__ == "__main__":

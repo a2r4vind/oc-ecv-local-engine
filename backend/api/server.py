@@ -17,11 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import uvicorn
 
 from ingestion.netcdf_reader import parse_file, IngestionError
 from processing.statistics import compute_regional_stats, StatisticsError
 from processing.quality_mask import QualityMaskError
+from processing.statistics import compute_regional_stats_multivar
+
+
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
 
@@ -134,6 +138,28 @@ def get_stats(
         return _sanitize(result)
     except (StatisticsError, QualityMaskError, IngestionError) as e:
         return {"error": str(e)}
+    
+
+@app.get("/stats-multi")
+def stats_multi(
+    path: str,
+    variables: str,  # comma-separated, e.g. "chlor_a,Rrs_443,Rrs_555"
+    lat_min: float, lat_max: float,
+    lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: str | None = None,
+):
+    var_list = [v.strip() for v in variables.split(",")]
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        result = compute_regional_stats_multivar(
+            path, var_list, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+        return json.loads(json.dumps(result, default=str))  # same NumPy-scalar sanitization as Day 5
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 if __name__ == "__main__":
