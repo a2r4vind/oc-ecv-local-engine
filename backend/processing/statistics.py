@@ -28,7 +28,7 @@ from ingestion.netcdf_reader import open_dataset, _find_data_and_nav_groups, Ing
 from processing.quality_mask import get_flag_definitions, build_quality_mask, QualityMaskError
 from processing.parallel_utils import run_parallel
 from processing.temporal_filter import filter_files_by_date_range, TemporalFilterError
-
+from caching.query_cache import get_cached_result, store_result
 
 class StatisticsError(Exception):
     """Raised when statistics can't be computed (bad inputs, no valid data, etc.)."""
@@ -320,6 +320,35 @@ def compute_batch_timeseries(
     timeseries.sort(key=lambda e: e["file"])
     return {"variable": variable, "file_count": len(timeseries), "timeseries": timeseries}
 
+
+def compute_regional_stats_cached(
+    file_path: str, variable: str,
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float,
+    start_date: str | None = None, end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Cache-aware wrapper around compute_regional_stats(). Checks SQLite
+    cache first (keyed on all params + file mtime); on miss, computes and
+    stores the result. Callers who need to force recomputation should call
+    compute_regional_stats() directly instead."""
+    cached = get_cached_result(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max,
+        start_date, end_date, quality_flags,
+    )
+    if cached is not None:
+        cached["_cache_hit"] = True
+        return cached
+
+    result = compute_regional_stats(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+    store_result(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max, result,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+    result["_cache_hit"] = False
+    return result
 
 if __name__ == "__main__":
     import json

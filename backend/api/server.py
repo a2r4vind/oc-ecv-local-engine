@@ -23,7 +23,7 @@ import uvicorn
 from ingestion.netcdf_reader import parse_file, IngestionError
 from processing.statistics import compute_regional_stats, StatisticsError
 from processing.quality_mask import QualityMaskError
-from processing.statistics import compute_regional_stats_multivar
+from processing.statistics import compute_regional_stats_multivar, compute_regional_stats_cached
 from processing.statistics import compute_batch_timeseries
 
 
@@ -131,7 +131,7 @@ def get_stats(
     flags_list = quality_flags.split(",") if quality_flags else None
 
     try:
-        result = compute_regional_stats(
+        result = compute_regional_stats_cached(
             path, variable, lat_min, lat_max, lon_min, lon_max,
             start_date=start_date, end_date=end_date, quality_flags=flags_list,
         )

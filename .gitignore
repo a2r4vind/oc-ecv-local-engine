@@ -37,3 +37,6 @@ backend/*.nc
 
 # Batch test data (regenerate via download_batch_real_data.py)
 backend/real_batch_data/
+
+# caching
+backend/cache/
