@@ -40,3 +40,11 @@ backend/real_batch_data/
 
 # caching
 backend/cache/
+# Real satellite data for Days 19-21 buffer/review ECV testing (regenerate
+# via download_sst_sample.py / download_sss_sample.py / download_iop_sample.py
+# / download_osvw_sample.py / download_ssh_sample.py)
+backend/real_sst_data/
+backend/real_sss_data/
+backend/real_iop_data/
+backend/real_osvw_data/
+backend/real_ssh_data/

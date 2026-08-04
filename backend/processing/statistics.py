@@ -67,6 +67,77 @@ def compute_statistics(values: np.ndarray) -> dict[str, Any]:
         "std": float(np.std(valid_values)),
     }
 
+def _apply_valid_range_mask(da: xr.DataArray, values: np.ndarray) -> np.ndarray:
+    """
+    xarray's decode_cf only honors _FillValue/missing_value, NOT valid_min/
+    valid_max — unlike netCDF4's own auto-masking, which excludes both.
+    This gap let physically-invalid values (e.g. SST of -72.75°C, outside
+    this file's own stated valid range) silently pass through as if they
+    were real decoded data. Reconstructs the valid range in scaled units
+    using the variable's own attrs/encoding (read dynamically, not
+    hardcoded, consistent with this project's Day 10 flag-handling
+    convention) and masks anything outside it as NaN.
+    """
+    attrs = da.attrs
+    if "valid_min" not in attrs and "valid_max" not in attrs:
+        return values  # nothing to do — file doesn't define a valid range
+
+    scale = da.encoding.get("scale_factor", 1.0)
+    offset = da.encoding.get("add_offset", 0.0)
+
+    valid_min = attrs.get("valid_min")
+    valid_max = attrs.get("valid_max")
+    scaled_min = valid_min * scale + offset if valid_min is not None else -np.inf
+    scaled_max = valid_max * scale + offset if valid_max is not None else np.inf
+
+    out_of_range = (values < scaled_min) | (values > scaled_max)
+    if out_of_range.any():
+        values = np.where(out_of_range, np.nan, values)
+    return values
+
+def _normalize_lon_to_file_convention(lon_coord: np.ndarray, lon_min: float, lon_max: float) -> tuple[float, float]:
+    """
+    Some products (e.g. RSS SMAP SSS) encode longitude as 0-360 instead of
+    the -180/180 convention used everywhere else in this pipeline (synthetic
+    fixtures, all NASA OB.DAAC L2 files tested so far). Detects this from
+    the file's own lon coordinate range and converts the user-facing
+    -180/180 bbox query into the file's native convention on the fly, so
+    callers never need to know or care which convention a given file uses.
+
+    Does not handle bboxes that cross the antimeridian in the converted
+    space (e.g. spanning 350-10 after conversion) — flagged as a known
+    limitation, not silently mishandled: raises clearly rather than
+    returning a wrong/empty result.
+    """
+    file_is_0_360 = bool(lon_coord.min() >= 0) and bool(lon_coord.max() > 180)
+    if not file_is_0_360:
+        return lon_min, lon_max  # file already uses -180/180, no conversion needed
+
+    def to_0_360(x: float) -> float:
+        return x + 360 if x < 0 else x
+
+    new_min, new_max = to_0_360(lon_min), to_0_360(lon_max)
+    if new_min > new_max:
+        raise StatisticsError(
+            f"Bounding box [{lon_min}, {lon_max}] crosses the antimeridian in this "
+            f"file's 0-360 longitude convention — not currently supported"
+        )
+    return new_min, new_max
+
+def _get_lat_lon_names(ds: xr.Dataset) -> tuple[str, str]:
+    """
+    Some products (e.g. real CCMP OSVW, SWOT SSH) use full 'latitude'/
+    'longitude' names instead of the 'lat'/'lon' convention used everywhere
+    else in this pipeline (synthetic fixtures, MODIS OB.DAAC files, SMAP
+    SSS). Checks ds.variables (covers both coords and data_vars) so this
+    works regardless of whether lat/lon are registered as dimension
+    coordinates or plain variables.
+    """
+    lat_name = "lat" if "lat" in ds.variables else ("latitude" if "latitude" in ds.variables else None)
+    lon_name = "lon" if "lon" in ds.variables else ("longitude" if "longitude" in ds.variables else None)
+    if lat_name is None or lon_name is None:
+        raise StatisticsError("Could not find lat/lon coordinates (checked 'lat'/'lon' and 'latitude'/'longitude')")
+    return lat_name, lon_name
 
 def _compute_flat_grid_stats(
     ds: xr.Dataset,
@@ -85,21 +156,26 @@ def _compute_flat_grid_stats(
         da = da.sel(time=slice(np.datetime64(start_date), np.datetime64(end_date)))
         if da.sizes.get("time", 0) == 0:
             raise StatisticsError(f"No time steps fall within [{start_date}, {end_date}]")
+            
+    lat_name, lon_name = _get_lat_lon_names(ds)
 
-    lat_ascending = bool(ds["lat"].values[0] < ds["lat"].values[-1])
-    lon_ascending = bool(ds["lon"].values[0] < ds["lon"].values[-1])
+    # normalize longitude as per file convention
+    lon_min, lon_max = _normalize_lon_to_file_convention(ds[lon_name].values, lon_min, lon_max)
+
+    lat_ascending = bool(ds[lat_name].values[0] < ds[lat_name].values[-1])
+    lon_ascending = bool(ds[lon_name].values[0] < ds[lon_name].values[-1])
     lat_slice = slice(lat_min, lat_max) if lat_ascending else slice(lat_max, lat_min)
     lon_slice = slice(lon_min, lon_max) if lon_ascending else slice(lon_max, lon_min)
 
-    da = da.sel(lat=lat_slice, lon=lon_slice)
+    da = da.sel({lat_name: lat_slice, lon_name: lon_slice})
 
-    if da.sizes.get("lat", 0) == 0 or da.sizes.get("lon", 0) == 0:
+    if da.sizes.get(lat_name, 0) == 0 or da.sizes.get(lon_name, 0) == 0:
         raise StatisticsError(
             f"Bounding box [{lat_min}, {lat_max}, {lon_min}, {lon_max}] does not overlap this file"
         )
 
-    return da.values
-
+    return _apply_valid_range_mask(da, da.values)
+            
 
 def _compute_swath_stats(
     data_ds: xr.Dataset,
@@ -131,10 +207,11 @@ def _compute_swath_stats(
     pixel_min, pixel_max = pixel_idx.min(), pixel_idx.max() + 1
 
     dim_names = data_ds[variable].dims
-    cropped = data_ds[variable].isel({
+    cropped_da = data_ds[variable].isel({
         dim_names[0]: slice(line_min, line_max),
         dim_names[1]: slice(pixel_min, pixel_max),
-    }).values
+    })
+    cropped = _apply_valid_range_mask(cropped_da, cropped_da.values)
     cropped_bbox_mask = bbox_mask[line_min:line_max, pixel_min:pixel_max]
 
     result = np.where(cropped_bbox_mask, cropped, np.nan)
@@ -190,19 +267,46 @@ def compute_regional_stats(
         finally:
             data_ds.close()
             nav_ds.close()
+    
     else:
-        if quality_flags:
-            raise StatisticsError(
-                "Quality-flag masking is not applicable to flat-grid files "
-                "(no l2_flags variable present)"
-            )
         ds = open_dataset(file_path)
         try:
-            values = _compute_flat_grid_stats(
-                ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date
-            )
-        finally:
-            ds.close()
+            lat_name, _ = _get_lat_lon_names(ds)
+            is_swath_shaped = ds[lat_name].ndim == 2
+        except StatisticsError:
+            is_swath_shaped = False
+
+        if is_swath_shaped:
+            # Groupless swath case (e.g. SWOT SSH): no geophysical_data/
+            # navigation_data grouping convention, but lat/lon are still
+            # 2D per-pixel arrays like real MODIS L2 swaths. Reuse
+            # _compute_swath_stats directly against the same flat dataset
+            # for both "data" and "nav" roles, rather than building new
+            # logic — the function already handles latitude/lat naming.
+            if start_date or end_date:
+                raise StatisticsError(
+                    "Temporal filtering is not applicable to single-granule "
+                    "swath-shaped files"
+                )
+            try:
+                values = _compute_swath_stats(
+                    ds, ds, variable, lat_min, lat_max, lon_min, lon_max, quality_flags
+                )
+            finally:
+                ds.close()
+        else:
+            if quality_flags:
+                raise StatisticsError(
+                    "Quality-flag masking is not applicable to flat-grid files "
+                    "(no l2_flags variable present)"
+                )
+            try:
+                values = _compute_flat_grid_stats(
+                    ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date
+                )
+            finally:
+                ds.close()
+    
 
     stats = compute_statistics(values)
     stats["file_name"] = Path(file_path).name

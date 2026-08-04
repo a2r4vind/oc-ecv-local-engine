@@ -25,9 +25,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from validation.file_validator import run_validation
 
 KNOWN_ECV_PREFIXES = {
+    # Ocean Color & Biogeochemistry
     "chlorophyll": ["chlor_a", "chl_ocx", "chl_a"],
     "reflectance": ["Rrs_", "Rrs"],
+    "cdom": ["cdom_index", "cdom", "adg"],
+    "poc": ["poc"],
+    "tsm_ssc": ["tsm", "ssc"],
+    "nflh": ["nflh"],
+    # Physical Oceanography
+    "sst": ["sst"],
+    "ssh": ["ssh"],
+    "sss": ["sss"],
+    "osvw": ["wind_u", "wind_v", "osvw", "u", "v"],
+    "sea_ice": ["sea_ice_conc", "sea_ice"],
+    # Energy & Air-Sea Interaction
+    "par": ["par", "ipar"],
+    "aod": ["aot_", "aot", "angstrom"],
 }
+
 
 DATA_GROUP_CANDIDATES = ["geophysical_data"]
 NAV_GROUP_CANDIDATES = ["navigation_data"]
