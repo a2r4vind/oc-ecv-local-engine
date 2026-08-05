@@ -20,6 +20,9 @@ interface ParameterSelectorProps {
   availableVariables: string[];
   supportsTemporalFilter: boolean; // false for single-granule swath files (Day 9's rule)
   onSubmit: (params: QueryParams) => void;
+  onBboxChange?: (
+    bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
+  ) => void;
 }
 
 export default function ParameterSelector({
@@ -27,6 +30,7 @@ export default function ParameterSelector({
   availableVariables,
   supportsTemporalFilter,
   onSubmit,
+  onBboxChange,
 }: ParameterSelectorProps) {
   const [variable, setVariable] = useState(availableVariables[0] || "");
   const [latMin, setLatMin] = useState("");
@@ -37,6 +41,29 @@ export default function ParameterSelector({
   const [endDate, setEndDate] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  function emitBboxChange(next: {
+    latMin?: string;
+    latMax?: string;
+    lonMin?: string;
+    lonMax?: string;
+  }) {
+    if (!onBboxChange) return;
+    const values = {
+      latMin: next.latMin ?? latMin,
+      latMax: next.latMax ?? latMax,
+      lonMin: next.lonMin ?? lonMin,
+      lonMax: next.lonMax ?? lonMax,
+    };
+    const parsed = {
+      latMin: parseFloat(values.latMin),
+      latMax: parseFloat(values.latMax),
+      lonMin: parseFloat(values.lonMin),
+      lonMax: parseFloat(values.lonMax),
+    };
+    const allValid = Object.values(parsed).every((v) => !Number.isNaN(v));
+    onBboxChange(allValid ? parsed : null);
+  }
+  
   function validate(): string | null {
     if (!variable) return "Select a variable to query.";
 
@@ -120,7 +147,10 @@ export default function ParameterSelector({
               type="number"
               step="any"
               value={latMin}
-              onChange={(e) => setLatMin(e.target.value)}
+              onChange={(e) => {
+                setLatMin(e.target.value);
+                emitBboxChange({ latMin: e.target.value });
+              }}
               placeholder="-90 to 90"
             />
           </label>
@@ -130,7 +160,10 @@ export default function ParameterSelector({
               type="number"
               step="any"
               value={latMax}
-              onChange={(e) => setLatMax(e.target.value)}
+              onChange={(e) => {
+                setLatMax(e.target.value);
+                emitBboxChange({ latMax: e.target.value });
+              }}
               placeholder="-90 to 90"
             />
           </label>
@@ -140,7 +173,10 @@ export default function ParameterSelector({
               type="number"
               step="any"
               value={lonMin}
-              onChange={(e) => setLonMin(e.target.value)}
+              onChange={(e) => {
+                setLonMin(e.target.value);
+                emitBboxChange({ lonMin: e.target.value });
+              }}
               placeholder="-180 to 180"
             />
           </label>
@@ -150,7 +186,10 @@ export default function ParameterSelector({
               type="number"
               step="any"
               value={lonMax}
-              onChange={(e) => setLonMax(e.target.value)}
+              onChange={(e) => {
+                setLonMax(e.target.value);
+                emitBboxChange({ lonMax: e.target.value });
+              }}
               placeholder="-180 to 180"
             />
           </label>

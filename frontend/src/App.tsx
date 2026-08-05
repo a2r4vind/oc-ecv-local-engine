@@ -5,6 +5,10 @@ import FileUploader from "./components/FileUploader/FileUploader";
 import ParameterSelector, {
   type QueryParams,
 } from "./components/ParameterSelector/ParameterSelector";
+import MapView, {
+  type MapBbox,
+  type SpatialBounds,
+} from "./components/MapView/MapView";
 import {
   computeStats,
   type IngestionResult,
@@ -18,6 +22,7 @@ function App() {
 
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
   const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
+  const [mapBbox, setMapBbox] = useState<MapBbox | null>(null);
 
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsResult, setStatsResult] = useState<StatsResult | null>(null);
@@ -32,6 +37,7 @@ function App() {
     setIngestedResult(result);
     setStatsResult(null);
     setStatsError(null);
+    setMapBbox(null);
   }
 
   async function handleQuerySubmit(params: QueryParams) {
@@ -69,6 +75,14 @@ function App() {
     ingestedResult?.metadata?.variables?.filter((v) => v !== "l2_flags") ?? [];
 
   const supportsTemporalFilter = ingestedResult?.metadata?.structure === "flat_grid";
+  
+  const spatialBounds: SpatialBounds | null =
+    ingestedResult?.metadata?.lat_range && ingestedResult?.metadata?.lon_range
+      ? {
+          latRange: ingestedResult.metadata.lat_range,
+          lonRange: ingestedResult.metadata.lon_range,
+        }
+      : null;
 
   return (
     <main className="container">
@@ -108,6 +122,9 @@ function App() {
 
       {ingestedFilePath && availableVariables.length > 0 && (
         <>
+          <h2>Map</h2>
+          <MapView bbox={mapBbox} spatialBounds={spatialBounds} />
+          
           <h2>Query Parameters</h2>
           <ParameterSelector
             key={ingestedFilePath}
@@ -115,6 +132,7 @@ function App() {
             availableVariables={availableVariables}
             supportsTemporalFilter={supportsTemporalFilter}
             onSubmit={handleQuerySubmit}
+            onBboxChange={setMapBbox}
           />
         </>
       )}
