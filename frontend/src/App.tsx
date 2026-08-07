@@ -11,9 +11,12 @@ import MapView, {
 } from "./components/MapView/MapView";
 import {
   computeStats,
+  fetchRaster,
   type IngestionResult,
   type StatsResult,
+  type RasterResult,
 } from "./services/backendApi";
+import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
 import "./App.css";
 
 function App() {
@@ -23,10 +26,15 @@ function App() {
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
   const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
   const [mapBbox, setMapBbox] = useState<MapBbox | null>(null);
-
+  
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsResult, setStatsResult] = useState<StatsResult | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+
+  const [rasterLoading, setRasterLoading] = useState(false);
+  const [rasterResult, setRasterResult] = useState<RasterResult | null>(null);
+  const [rasterError, setRasterError] = useState<string | null>(null);
+  const [colormap, setColormap] = useState<ColormapName>("viridis");
 
   async function greet() {
     setGreetMsg(await invoke("greet", { name }));
@@ -38,38 +46,60 @@ function App() {
     setStatsResult(null);
     setStatsError(null);
     setMapBbox(null);
+    setRasterResult(null);
+    setRasterError(null);
   }
-
+  
   async function handleQuerySubmit(params: QueryParams) {
     setStatsLoading(true);
     setStatsResult(null);
     setStatsError(null);
+    setRasterLoading(true);
+    setRasterResult(null);
+    setRasterError(null);
 
-    try {
-      const result = await computeStats({
-        filePath: params.filePath,
-        variable: params.variable,
-        latMin: params.latMin,
-        latMax: params.latMax,
-        lonMin: params.lonMin,
-        lonMax: params.lonMax,
-        startDate: params.startDate,
-        endDate: params.endDate,
-      });
+    const query = {
+      filePath: params.filePath,
+      variable: params.variable,
+      latMin: params.latMin,
+      latMax: params.latMax,
+      lonMin: params.lonMin,
+      lonMax: params.lonMax,
+      startDate: params.startDate,
+      endDate: params.endDate,
+    };
 
-      if (result.error) {
-        setStatsError(result.error);
-      } else {
-        setStatsResult(result);
+    // Fired concurrently, independent loading/error states — a raster
+    // failure (e.g. a genuinely empty region) shouldn't block the stats
+    // panel from displaying, and vice versa.
+    const statsTask = (async () => {
+      try {
+        const result = await computeStats(query);
+        if (result.error) setStatsError(result.error);
+        else setStatsResult(result);
+      } catch (err) {
+        setStatsError(
+          err instanceof Error ? `Could not reach backend: ${err.message}` : "Unknown error"
+        );
+      } finally {
+        setStatsLoading(false);
       }
-    } catch (err) {
-      setStatsError(
-        err instanceof Error ? `Could not reach backend: ${err.message}` : "Unknown error"
-      );
-    } finally {
-      setStatsLoading(false);
-    }
+    })();
+
+    const rasterTask = (async () => {
+      try {
+        const result = await fetchRaster(query);
+        setRasterResult(result);
+      } catch (err) {
+        setRasterError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setRasterLoading(false);
+      }
+    })();
+
+    await Promise.all([statsTask, rasterTask]);
   }
+
 
   const availableVariables =
     ingestedResult?.metadata?.variables?.filter((v) => v !== "l2_flags") ?? [];
@@ -123,7 +153,32 @@ function App() {
       {ingestedFilePath && availableVariables.length > 0 && (
         <>
           <h2>Map</h2>
-          <MapView bbox={mapBbox} spatialBounds={spatialBounds} />
+          <div style={{ maxWidth: 640, margin: "0 auto 0.5rem", textAlign: "left" }}>
+            <label htmlFor="colormap-select" style={{ marginRight: "0.5rem" }}>
+              Colormap:
+            </label>
+            <select
+              id="colormap-select"
+              value={colormap}
+              onChange={(e) => setColormap(e.target.value as ColormapName)}
+            >
+              {COLORMAP_NAMES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {rasterLoading && <span style={{ marginLeft: "0.75rem" }}>Loading raster…</span>}
+            {rasterError && (
+              <span style={{ marginLeft: "0.75rem", color: "#b91c1c" }}>⚠ {rasterError}</span>
+            )}
+          </div>
+          <MapView
+            bbox={mapBbox}
+            spatialBounds={spatialBounds}
+            rasterResult={rasterResult}
+            colormap={colormap}
+          />
           
           <h2>Query Parameters</h2>
           <ParameterSelector

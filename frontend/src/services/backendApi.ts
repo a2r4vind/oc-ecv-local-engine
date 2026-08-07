@@ -97,3 +97,88 @@ export async function computeStats(query: StatsQuery): Promise<StatsResult> {
   }
   return res.json();
 }
+
+export interface RasterBitmapResult {
+  type: "bitmap";
+  imageBitmap: ImageBitmap;
+  bounds: [number, number, number, number]; // west, south, east, north
+  valueMin: number;
+  valueMax: number;
+  gridShape: [number, number];
+}
+
+export interface RasterPointsResult {
+  type: "points";
+  lon: Float32Array;
+  lat: Float32Array;
+  value: Float32Array; // normalized 0-1
+  valueMin: number;
+  valueMax: number;
+  pointCount: number;
+}
+
+export type RasterResult = RasterBitmapResult | RasterPointsResult;
+
+export async function fetchRaster(query: StatsQuery): Promise<RasterResult> {
+  const params = new URLSearchParams({
+    path: query.filePath,
+    variable: query.variable,
+    lat_min: String(query.latMin),
+    lat_max: String(query.latMax),
+    lon_min: String(query.lonMin),
+    lon_max: String(query.lonMax),
+  });
+  if (query.startDate) params.set("start_date", query.startDate);
+  if (query.endDate) params.set("end_date", query.endDate);
+  if (query.qualityFlags && query.qualityFlags.length > 0) {
+    params.set("quality_flags", query.qualityFlags.join(","));
+  }
+
+  const res = await fetch(`${BASE_URL}/raster?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Backend returned status ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) message = errJson.error;
+    } catch {
+      // response wasn't JSON — keep the generic message
+    }
+    throw new Error(message);
+  }
+
+  const rasterType = res.headers.get("X-Raster-Type");
+  const valueMin = parseFloat(res.headers.get("X-Value-Min") ?? "0");
+  const valueMax = parseFloat(res.headers.get("X-Value-Max") ?? "1");
+
+  if (rasterType === "bitmap") {
+    const boundsHeader = res.headers.get("X-Bounds") ?? "";
+    const bounds = boundsHeader.split(",").map(Number) as [number, number, number, number];
+    const shapeHeader = res.headers.get("X-Grid-Shape") ?? "";
+    const gridShape = shapeHeader.split(",").map(Number) as [number, number];
+
+    const blob = await res.blob();
+    const imageBitmap = await createImageBitmap(blob);
+
+    return { type: "bitmap", imageBitmap, bounds, valueMin, valueMax, gridShape };
+  }
+
+  if (rasterType === "points") {
+    const pointCount = parseInt(res.headers.get("X-Point-Count") ?? "0", 10);
+    const buffer = await res.arrayBuffer();
+
+    // Binary layout from raster.py: [uint32 count][float32 lon * N]
+    // [float32 lat * N][float32 normalized_value * N]. Relies on NumPy's
+    // .tobytes() (little-endian on x86_64) matching JS typed arrays'
+    // native byte order (also little-endian on x86_64 Chromium/
+    // WebKit) — true for this project's target platform, flagged here
+    // explicitly rather than left implicit.
+    const HEADER_BYTES = 4;
+    const lon = new Float32Array(buffer, HEADER_BYTES, pointCount);
+    const lat = new Float32Array(buffer, HEADER_BYTES + pointCount * 4, pointCount);
+    const value = new Float32Array(buffer, HEADER_BYTES + pointCount * 8, pointCount);
+
+    return { type: "points", lon, lat, value, valueMin, valueMax, pointCount };
+  }
+
+  throw new Error(`Unexpected X-Raster-Type header: ${rasterType}`);
+}

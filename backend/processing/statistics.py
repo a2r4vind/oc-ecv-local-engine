@@ -144,7 +144,8 @@ def _compute_flat_grid_stats(
     variable: str,
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,
     start_date: str | None, end_date: str | None,
-) -> np.ndarray:
+    return_coords: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray]:
     if variable not in ds.data_vars:
         raise StatisticsError(f"Variable '{variable}' not found in dataset")
 
@@ -174,7 +175,13 @@ def _compute_flat_grid_stats(
             f"Bounding box [{lat_min}, {lat_max}, {lon_min}, {lon_max}] does not overlap this file"
         )
 
-    return _apply_valid_range_mask(da, da.values)
+    values = _apply_valid_range_mask(da, da.values)
+    if return_coords:
+        # da still carries its post-slice coordinate arrays, so no
+        # separate re-slicing is needed to hand back lat/lon axes that
+        # line up with whatever pixels ended up in `values`.
+        return values, da[lat_name].values, da[lon_name].values
+    return values
             
 
 def _compute_swath_stats(
@@ -183,7 +190,8 @@ def _compute_swath_stats(
     variable: str,
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,
     quality_flags: list[str] | None,
-) -> np.ndarray:
+    return_coords: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray]:
     if variable not in data_ds.data_vars:
         raise StatisticsError(f"Variable '{variable}' not found in dataset")
 
@@ -229,23 +237,35 @@ def _compute_swath_stats(
         except QualityMaskError as e:
             raise StatisticsError(str(e)) from e
         result = np.where(quality_mask_out, np.nan, result)
+        
+    if return_coords:
+        # Crop the same bounding rectangle out of the per-pixel lat/lon
+        # arrays so callers get coordinates that line up 1:1 with `result`
+        # — required for swath rendering, since these pixels are NOT on a
+        # regular grid and can't be reconstructed from corner bounds alone.
+        cropped_lat = lat_arr[line_min:line_max, pixel_min:pixel_max]
+        cropped_lon = lon_arr[line_min:line_max, pixel_min:pixel_max]
+        return result, cropped_lat, cropped_lon
 
     return result
 
-
-def compute_regional_stats(
+def _get_subsetted_data(
     file_path: str,
     variable: str,
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,
     start_date: str | None = None,
     end_date: str | None = None,
     quality_flags: list[str] | None = None,
+    return_coords: bool = False,
 ) -> dict[str, Any]:
     """
-    Main entrypoint — combines bounding-box subsetting (Day 8), optional
-    temporal filtering (Day 9, flat-grid files only), and optional
-    quality-flag masking (Day 10, swath files only) into one query,
-    then computes statistics on whatever data remains.
+    Shared dispatch logic — auto-detects file structure (grouped-swath,
+    groupless-swath, or flat-grid) and returns the subsetted/masked array
+    for whichever structure this file actually is. Factored out of
+    compute_regional_stats() on Day 23 so the raster-rendering path
+    (which needs the array + its coordinates, not a scalar reduction) can
+    reuse the exact same structure-detection and subsetting logic instead
+    of duplicating it.
     """
     data_group, nav_group = _find_data_and_nav_groups(file_path)
 
@@ -261,13 +281,15 @@ def compute_regional_stats(
         data_ds = open_dataset(file_path, group=data_group)
         nav_ds = open_dataset(file_path, group=nav_group)
         try:
-            values = _compute_swath_stats(
-                data_ds, nav_ds, variable, lat_min, lat_max, lon_min, lon_max, quality_flags
+            result = _compute_swath_stats(
+                data_ds, nav_ds, variable, lat_min, lat_max, lon_min, lon_max,
+                quality_flags, return_coords=return_coords,
             )
         finally:
             data_ds.close()
             nav_ds.close()
-    
+        structure_type = "swath"
+
     else:
         ds = open_dataset(file_path)
         try:
@@ -277,23 +299,19 @@ def compute_regional_stats(
             is_swath_shaped = False
 
         if is_swath_shaped:
-            # Groupless swath case (e.g. SWOT SSH): no geophysical_data/
-            # navigation_data grouping convention, but lat/lon are still
-            # 2D per-pixel arrays like real MODIS L2 swaths. Reuse
-            # _compute_swath_stats directly against the same flat dataset
-            # for both "data" and "nav" roles, rather than building new
-            # logic — the function already handles latitude/lat naming.
             if start_date or end_date:
                 raise StatisticsError(
                     "Temporal filtering is not applicable to single-granule "
                     "swath-shaped files"
                 )
             try:
-                values = _compute_swath_stats(
-                    ds, ds, variable, lat_min, lat_max, lon_min, lon_max, quality_flags
+                result = _compute_swath_stats(
+                    ds, ds, variable, lat_min, lat_max, lon_min, lon_max,
+                    quality_flags, return_coords=return_coords,
                 )
             finally:
                 ds.close()
+            structure_type = "swath"
         else:
             if quality_flags:
                 raise StatisticsError(
@@ -301,13 +319,44 @@ def compute_regional_stats(
                     "(no l2_flags variable present)"
                 )
             try:
-                values = _compute_flat_grid_stats(
-                    ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date
+                result = _compute_flat_grid_stats(
+                    ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date,
+                    return_coords=return_coords,
                 )
             finally:
                 ds.close()
-    
+            structure_type = "flat_grid"
 
+    if return_coords:
+        values, lat_coords, lon_coords = result
+        return {
+            "values": values,
+            "structure_type": structure_type,
+            "lat_coords": lat_coords,
+            "lon_coords": lon_coords,
+        }
+    return {"values": result, "structure_type": structure_type, "lat_coords": None, "lon_coords": None}
+
+def compute_regional_stats(
+    file_path: str,
+    variable: str,
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Main entrypoint — combines bounding-box subsetting (Day 8), optional
+    temporal filtering (Day 9, flat-grid files only), and optional
+    quality-flag masking (Day 10, swath files only) into one query,
+    then computes statistics on whatever data remains.
+    """
+    subset = _get_subsetted_data(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+    values = subset["values"]
+    
     stats = compute_statistics(values)
     stats["file_name"] = Path(file_path).name
     stats["variable"] = variable

@@ -17,14 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 
 from ingestion.netcdf_reader import parse_file, IngestionError
-from processing.statistics import compute_regional_stats, StatisticsError
+from processing.statistics import StatisticsError
 from processing.quality_mask import QualityMaskError
 from processing.statistics import compute_regional_stats_multivar, compute_regional_stats_cached
 from processing.statistics import compute_batch_timeseries
+from processing.raster import compute_regional_raster, RasterError
 
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
@@ -40,6 +41,14 @@ app.add_middleware(
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    # /raster (Day 23) sends metadata via custom response headers instead
+    # of a JSON body, to avoid a second round-trip for binary payloads.
+    # Without explicitly exposing them, fetch() silently returns null for
+    # these even though the server sent them correctly.
+    expose_headers=[
+        "X-Raster-Type", "X-Value-Min", "X-Value-Max",
+        "X-Bounds", "X-Grid-Shape", "X-Point-Count",
+    ],
 )
 
 
@@ -139,6 +148,48 @@ def get_stats(
     except (StatisticsError, QualityMaskError, IngestionError) as e:
         return {"error": str(e)}
     
+
+@app.get("/raster")
+def get_raster(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+):
+    """
+    Returns pixel-level data for WebGL raster rendering (Day 23), reusing
+    the same subsetting/masking pipeline as /stats but returning an
+    encoded binary payload instead of scalar statistics. Response shape
+    depends on file structure (see X-Raster-Type header):
+      - 'bitmap': flat-grid files — PNG bytes + X-Bounds, for BitmapLayer.
+      - 'points': swath files — packed Float32 binary, for ScatterplotLayer.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        payload, raster_type, meta = compute_regional_raster(
+            path, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+    except (StatisticsError, QualityMaskError, IngestionError, RasterError) as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    headers = {
+        "X-Raster-Type": raster_type,
+        "X-Value-Min": str(meta["value_min"]),
+        "X-Value-Max": str(meta["value_max"]),
+    }
+    if raster_type == "bitmap":
+        headers["X-Bounds"] = ",".join(str(b) for b in meta["bounds"])
+        headers["X-Grid-Shape"] = ",".join(str(s) for s in meta["grid_shape"])
+        return Response(content=payload, media_type="image/png", headers=headers)
+
+    headers["X-Point-Count"] = str(meta["point_count"])
+    return Response(content=payload, media_type="application/octet-stream", headers=headers)
 
 @app.get("/stats-multi")
 def stats_multi(
