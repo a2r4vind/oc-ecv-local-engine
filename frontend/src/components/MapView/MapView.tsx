@@ -46,6 +46,11 @@ interface MapViewProps {
   // Active colormap — applied client-side against rasterResult, never
   // requires a backend re-fetch when changed.
   colormap: ColormapName;
+  // Day 24: layer opacity (0-1), applied on top of each pixel/point's
+  // own validity-derived alpha — masked/invalid data stays invisible
+  // regardless of this value; it only affects how strongly VALID data
+  // shows through the base map underneath.
+  opacity: number;
 }
 
 // Bridges deck.gl into the MapLibre map instance. Uses overlaid mode
@@ -73,7 +78,7 @@ function isValidBbox(bbox: MapBbox | null): bbox is MapBbox {
   );
 }
 
-export default function MapView({ bbox, spatialBounds, rasterResult, colormap }: MapViewProps) {
+export default function MapView({ bbox, spatialBounds, rasterResult, colormap, opacity }: MapViewProps) {
   const mapRef = useRef<MapRef | null>(null);
 
   // Auto-zoom to the ingested file's spatial extent whenever it changes
@@ -134,6 +139,7 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap }:
         id: "raster-bitmap",
         image: recoloredCanvas,
         bounds: rasterResult.bounds,
+        opacity,
       })
     );
   }
@@ -152,6 +158,7 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap }:
         radiusMinPixels: 1.5,
         radiusMaxPixels: 4,
         stroked: false,
+        opacity,
       })
     );
   }

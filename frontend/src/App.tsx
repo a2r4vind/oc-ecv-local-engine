@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import FileUploader from "./components/FileUploader/FileUploader";
@@ -17,6 +17,8 @@ import {
   type RasterResult,
 } from "./services/backendApi";
 import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
+import ColorLegend from "./components/ColorLegend/ColorLegend";
+import OpacitySlider from "./components/OpacitySlider/OpacitySlider";
 import "./App.css";
 
 function App() {
@@ -35,6 +37,8 @@ function App() {
   const [rasterResult, setRasterResult] = useState<RasterResult | null>(null);
   const [rasterError, setRasterError] = useState<string | null>(null);
   const [colormap, setColormap] = useState<ColormapName>("viridis");
+  const [opacity, setOpacity] = useState(1);
+  const [queriedVariable, setQueriedVariable] = useState<string | null>(null);
 
   async function greet() {
     setGreetMsg(await invoke("greet", { name }));
@@ -57,6 +61,7 @@ function App() {
     setRasterLoading(true);
     setRasterResult(null);
     setRasterError(null);
+    setQueriedVariable(params.variable);
 
     const query = {
       filePath: params.filePath,
@@ -106,13 +111,24 @@ function App() {
 
   const supportsTemporalFilter = ingestedResult?.metadata?.structure === "flat_grid";
   
-  const spatialBounds: SpatialBounds | null =
-    ingestedResult?.metadata?.lat_range && ingestedResult?.metadata?.lon_range
-      ? {
-          latRange: ingestedResult.metadata.lat_range,
-          lonRange: ingestedResult.metadata.lon_range,
-        }
-      : null;
+  // Memoized so this object reference only changes when a NEW file is
+  // actually ingested — not on every unrelated App re-render (opacity
+  // drag, colormap switch, bbox keystroke). Without this, MapView's
+  // auto-zoom effect (keyed on this object) re-fires on every such
+  // render and silently resets any manual pan/zoom back to the file's
+  // full extent, since a new object literal on every render looks like
+  // "changed" to React's reference-based dependency comparison even
+  // when the underlying lat/lon values are identical.
+  const spatialBounds: SpatialBounds | null = useMemo(() => {
+    if (!ingestedResult?.metadata?.lat_range || !ingestedResult?.metadata?.lon_range) {
+      return null;
+    }
+    return {
+      latRange: ingestedResult.metadata.lat_range,
+      lonRange: ingestedResult.metadata.lon_range,
+    };
+  }, [ingestedResult]);
+  
 
   return (
     <main className="container">
@@ -168,6 +184,15 @@ function App() {
                 </option>
               ))}
             </select>
+            
+            <label htmlFor="opacity-slider" style={{ marginLeft: "1rem", marginRight: "0.5rem" }}>
+              Opacity:
+            </label>
+            <OpacitySlider
+              value={Math.round(opacity * 100)}
+              onChange={(v) => setOpacity(v / 100)}
+            />
+            <span style={{ marginLeft: "0.35rem" }}>{Math.round(opacity * 100)}%</span>
             {rasterLoading && <span style={{ marginLeft: "0.75rem" }}>Loading raster…</span>}
             {rasterError && (
               <span style={{ marginLeft: "0.75rem", color: "#b91c1c" }}>⚠ {rasterError}</span>
@@ -178,7 +203,16 @@ function App() {
             spatialBounds={spatialBounds}
             rasterResult={rasterResult}
             colormap={colormap}
+            opacity={opacity}
           />
+          {rasterResult && (
+            <ColorLegend
+              colormap={colormap}
+              valueMin={rasterResult.valueMin}
+              valueMax={rasterResult.valueMax}
+              variable={queriedVariable ?? undefined}
+            />
+          )}
           
           <h2>Query Parameters</h2>
           <ParameterSelector

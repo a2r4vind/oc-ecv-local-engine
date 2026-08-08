@@ -46,6 +46,17 @@ const COLORMAPS: Record<ColormapName, Stop[]> = {
 
 export const COLORMAP_NAMES: ColormapName[] = ["viridis", "ocean", "jet"];
 
+/** Builds a CSS linear-gradient string from a colormap's own stop table,
+ * so the legend bar can never visually disagree with what's actually
+ * rendered on the map — same source data, different output format. */
+export function getGradientCss(name: ColormapName): string {
+  const stops = COLORMAPS[name];
+  const stopStrings = stops.map(
+    (s) => `rgb(${s.color[0]}, ${s.color[1]}, ${s.color[2]}) ${(s.t * 100).toFixed(0)}%`
+  );
+  return `linear-gradient(to right, ${stopStrings.join(", ")})`;
+}
+
 function lerp(a: number, b: number, f: number): number {
   return a + (b - a) * f;
 }
