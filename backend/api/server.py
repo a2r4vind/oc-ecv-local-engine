@@ -24,7 +24,7 @@ from ingestion.netcdf_reader import parse_file, IngestionError
 from processing.statistics import StatisticsError
 from processing.quality_mask import QualityMaskError
 from processing.statistics import compute_regional_stats_multivar, compute_regional_stats_cached
-from processing.statistics import compute_batch_timeseries
+from processing.statistics import compute_batch_timeseries, compute_timeseries_within_file
 from processing.raster import compute_regional_raster, RasterError
 
 
@@ -190,6 +190,32 @@ def get_raster(
 
     headers["X-Point-Count"] = str(meta["point_count"])
     return Response(content=payload, media_type="application/octet-stream", headers=headers)
+
+@app.get("/timeseries-within-file")
+def timeseries_within_file(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+):
+    """
+    Day 25: per-time-step regional statistics within a single flat-grid
+    file's own time dimension, for within-file time-series trendlines —
+    distinct from Day 17's /batch-timeseries, which series over multiple
+    separate files rather than one file's own time steps.
+    """
+    try:
+        result = compute_timeseries_within_file(
+            path, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date,
+        )
+        return _sanitize(result)
+    except (StatisticsError, IngestionError) as e:
+        return {"error": str(e)}
 
 @app.get("/stats-multi")
 def stats_multi(

@@ -182,3 +182,98 @@ export async function fetchRaster(query: StatsQuery): Promise<RasterResult> {
 
   throw new Error(`Unexpected X-Raster-Type header: ${rasterType}`);
 }
+
+export interface WithinFileTimeSeriesEntry {
+  time: string;
+  total_pixel_count?: number;
+  valid_pixel_count?: number;
+  valid_fraction?: number;
+  mean: number | null;
+  min?: number | null;
+  max?: number | null;
+  std?: number | null;
+}
+
+export interface WithinFileTimeSeriesResult {
+  file_name?: string;
+  variable?: string;
+  entries: WithinFileTimeSeriesEntry[];
+  error?: string;
+}
+
+export async function fetchTimeseriesWithinFile(params: {
+  filePath: string;
+  variable: string;
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  startDate?: string;
+  endDate?: string;
+}): Promise<WithinFileTimeSeriesResult> {
+  const query = new URLSearchParams({
+    path: params.filePath,
+    variable: params.variable,
+    lat_min: String(params.latMin),
+    lat_max: String(params.latMax),
+    lon_min: String(params.lonMin),
+    lon_max: String(params.lonMax),
+  });
+  if (params.startDate) query.set("start_date", params.startDate);
+  if (params.endDate) query.set("end_date", params.endDate);
+
+  const res = await fetch(`${BASE_URL}/timeseries-within-file?${query.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Backend returned status ${res.status}`);
+  }
+  return res.json();
+}
+
+export interface BatchTimeseriesEntry {
+  file: string;
+  mean?: number | null;
+  min?: number | null;
+  max?: number | null;
+  std?: number | null;
+  valid_fraction?: number;
+  skipped?: boolean;
+  reason?: string;
+  error?: string;
+}
+
+export interface BatchTimeseriesResult {
+  variable?: string;
+  file_count?: number;
+  timeseries: BatchTimeseriesEntry[];
+  error?: string;
+}
+
+export async function fetchBatchTimeseries(params: {
+  directory: string;
+  variable: string;
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  startDate: string; // required — Day 17's filter_files_by_date_range has
+  // no None-guard on start/end date, so these can't be left optional here
+  // the way /stats and /timeseries-within-file allow.
+  endDate: string;
+}): Promise<BatchTimeseriesResult> {
+  const query = new URLSearchParams({
+    directory: params.directory,
+    variable: params.variable,
+    lat_min: String(params.latMin),
+    lat_max: String(params.latMax),
+    lon_min: String(params.lonMin),
+    lon_max: String(params.lonMax),
+    start_date: params.startDate,
+    end_date: params.endDate,
+  });
+
+  const res = await fetch(`${BASE_URL}/batch-timeseries?${query.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Backend returned status ${res.status}`);
+  }
+  return res.json();
+}

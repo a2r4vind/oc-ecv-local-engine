@@ -145,7 +145,7 @@ def _compute_flat_grid_stats(
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,
     start_date: str | None, end_date: str | None,
     return_coords: bool = False,
-) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
     if variable not in ds.data_vars:
         raise StatisticsError(f"Variable '{variable}' not found in dataset")
 
@@ -174,14 +174,19 @@ def _compute_flat_grid_stats(
         raise StatisticsError(
             f"Bounding box [{lat_min}, {lat_max}, {lon_min}, {lon_max}] does not overlap this file"
         )
-
+        
     values = _apply_valid_range_mask(da, da.values)
     if return_coords:
         # da still carries its post-slice coordinate arrays, so no
         # separate re-slicing is needed to hand back lat/lon axes that
-        # line up with whatever pixels ended up in `values`.
-        return values, da[lat_name].values, da[lon_name].values
+        # line up with whatever pixels ended up in `values`. time_coords
+        # is None when the file has no time dimension at all (Day 25:
+        # needed so compute_timeseries_within_file() can iterate per
+        # time step without duplicating this slicing logic).
+        time_coords = da["time"].values if "time" in da.coords else None
+        return values, da[lat_name].values, da[lon_name].values, time_coords
     return values
+
             
 
 def _compute_swath_stats(
@@ -191,7 +196,7 @@ def _compute_swath_stats(
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,
     quality_flags: list[str] | None,
     return_coords: bool = False,
-) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> np.ndarray | tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
     if variable not in data_ds.data_vars:
         raise StatisticsError(f"Variable '{variable}' not found in dataset")
 
@@ -245,8 +250,9 @@ def _compute_swath_stats(
         # regular grid and can't be reconstructed from corner bounds alone.
         cropped_lat = lat_arr[line_min:line_max, pixel_min:pixel_max]
         cropped_lon = lon_arr[line_min:line_max, pixel_min:pixel_max]
-        return result, cropped_lat, cropped_lon
-
+        # Swath files are a single short time window — no time dimension
+        # to series over, hence None here (Day 25).
+        return result, cropped_lat, cropped_lon, None
     return result
 
 def _get_subsetted_data(
@@ -326,16 +332,24 @@ def _get_subsetted_data(
             finally:
                 ds.close()
             structure_type = "flat_grid"
-
+    
     if return_coords:
-        values, lat_coords, lon_coords = result
+        values, lat_coords, lon_coords, time_coords = result
         return {
             "values": values,
             "structure_type": structure_type,
             "lat_coords": lat_coords,
             "lon_coords": lon_coords,
+            "time_coords": time_coords,
         }
-    return {"values": result, "structure_type": structure_type, "lat_coords": None, "lon_coords": None}
+    return {
+        "values": result,
+        "structure_type": structure_type,
+        "lat_coords": None,
+        "lon_coords": None,
+        "time_coords": None,
+    }
+    
 
 def compute_regional_stats(
     file_path: str,
@@ -367,6 +381,56 @@ def compute_regional_stats(
         stats["quality_flags_masked"] = quality_flags
 
     return stats
+
+def compute_timeseries_within_file(
+    file_path: str,
+    variable: str,
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """
+    Computes per-time-step regional statistics within a single flat-grid
+    file's own time dimension (Day 25) — e.g. sample_oceancolor.nc's 3
+    time steps — producing a genuine within-file time series, distinct
+    from compute_regional_stats(), which pools an entire date range into
+    one aggregate. Not applicable to swath files (single short time
+    window, no time dimension) or files with no time coordinate at all.
+    Reuses _get_subsetted_data() (Day 23) for the actual subsetting
+    rather than duplicating bbox/masking logic.
+    """
+    subset = _get_subsetted_data(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date,
+        return_coords=True,
+    )
+    if subset["structure_type"] != "flat_grid":
+        raise StatisticsError(
+            "Within-file time-series is only applicable to flat-grid files "
+            "(swath files represent a single short time window — use "
+            "/batch-timeseries across multiple files instead)"
+        )
+
+    time_coords = subset["time_coords"]
+    if time_coords is None:
+        raise StatisticsError("File has no 'time' coordinate to build a series over")
+
+    values = subset["values"]
+    if values.ndim != 3:
+        raise StatisticsError(
+            "Expected a time-varying (time, lat, lon) array for this file"
+        )
+
+    entries = []
+    for i in range(values.shape[0]):
+        stat = compute_statistics(values[i])
+        entries.append({"time": str(time_coords[i]), **stat})
+
+    return {
+        "file_name": Path(file_path).name,
+        "variable": variable,
+        "entries": entries,
+    }
 
 _netcdf_file_lock = threading.Lock()
 

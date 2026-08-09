@@ -1,0 +1,94 @@
+.timeseries-panel {
+  max-width: 640px;
+  margin: 2rem auto;
+  padding: 1.25rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.timeseries-mode-toggle {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.timeseries-mode-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 500;
+}
+
+.timeseries-note {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 0.75rem;
+}
+
+.field-group {
+  margin-bottom: 1rem;
+}
+
+.field-group label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.field-group select,
+.field-group input[type="text"] {
+  width: 100%;
+  padding: 0.4rem;
+  box-sizing: border-box;
+}
+
+.bbox-fieldset,
+.date-fieldset {
+  border: 1px solid #e2e2e2;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+}
+
+.bbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.bbox-grid label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+}
+
+.bbox-grid input {
+  margin-top: 0.25rem;
+  padding: 0.35rem;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.directory-picker {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.directory-picker input {
+  flex: 1;
+}
+
+.validation-error {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  font-size: 0.9rem;
+}

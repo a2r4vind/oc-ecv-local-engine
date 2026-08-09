@@ -19,6 +19,7 @@ import {
 import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
 import ColorLegend from "./components/ColorLegend/ColorLegend";
 import OpacitySlider from "./components/OpacitySlider/OpacitySlider";
+import TimeSeriesPanel from "./components/TimeSeriesPanel/TimeSeriesPanel";
 import "./App.css";
 
 function App() {
@@ -214,9 +215,17 @@ function App() {
             />
           )}
           
+          <TimeSeriesPanel
+            key={`timeseries-${ingestedFilePath}`}
+            filePath={ingestedFilePath}
+            availableVariables={availableVariables}
+            defaultBbox={mapBbox}
+            supportsWithinFile={supportsTemporalFilter}
+          />
+          
           <h2>Query Parameters</h2>
           <ParameterSelector
-            key={ingestedFilePath}
+            key={`params-${ingestedFilePath}`}
             filePath={ingestedFilePath}
             availableVariables={availableVariables}
             supportsTemporalFilter={supportsTemporalFilter}
