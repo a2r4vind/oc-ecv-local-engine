@@ -277,3 +277,112 @@ export async function fetchBatchTimeseries(params: {
   }
   return res.json();
 }
+
+export interface HistogramResult {
+  file_name?: string;
+  variable?: string;
+  bin_edges: number[];
+  counts: number[];
+  valid_pixel_count?: number;
+  mean?: number;
+  std?: number;
+  error?: string;
+}
+
+export interface HistogramQuery {
+  filePath: string;
+  variable: string;
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  startDate?: string;
+  endDate?: string;
+  qualityFlags?: string[];
+  bins?: number;
+}
+
+export async function fetchHistogram(query: HistogramQuery): Promise<HistogramResult> {
+  const params = new URLSearchParams({
+    path: query.filePath,
+    variable: query.variable,
+    lat_min: String(query.latMin),
+    lat_max: String(query.latMax),
+    lon_min: String(query.lonMin),
+    lon_max: String(query.lonMax),
+  });
+  if (query.startDate) params.set("start_date", query.startDate);
+  if (query.endDate) params.set("end_date", query.endDate);
+  if (query.qualityFlags && query.qualityFlags.length > 0) {
+    params.set("quality_flags", query.qualityFlags.join(","));
+  }
+  if (query.bins) params.set("bins", String(query.bins));
+
+  const res = await fetch(`${BASE_URL}/histogram?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Backend returned status ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) message = errJson.error;
+    } catch {
+      // response wasn't JSON — keep the generic message
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export interface ScatterResult {
+  file_name?: string;
+  variable_x?: string;
+  variable_y?: string;
+  x: number[];
+  y: number[];
+  total_pair_count?: number;
+  returned_pair_count?: number;
+  correlation?: number | null;
+  error?: string;
+}
+
+export interface ScatterQuery {
+  filePath: string;
+  variableX: string;
+  variableY: string;
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  startDate?: string;
+  endDate?: string;
+  qualityFlags?: string[];
+}
+
+export async function fetchScatter(query: ScatterQuery): Promise<ScatterResult> {
+  const params = new URLSearchParams({
+    path: query.filePath,
+    variable_x: query.variableX,
+    variable_y: query.variableY,
+    lat_min: String(query.latMin),
+    lat_max: String(query.latMax),
+    lon_min: String(query.lonMin),
+    lon_max: String(query.lonMax),
+  });
+  if (query.startDate) params.set("start_date", query.startDate);
+  if (query.endDate) params.set("end_date", query.endDate);
+  if (query.qualityFlags && query.qualityFlags.length > 0) {
+    params.set("quality_flags", query.qualityFlags.join(","));
+  }
+
+  const res = await fetch(`${BASE_URL}/scatter?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Backend returned status ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) message = errJson.error;
+    } catch {
+      // response wasn't JSON — keep the generic message
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}

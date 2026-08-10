@@ -432,6 +432,133 @@ def compute_timeseries_within_file(
         "entries": entries,
     }
 
+SCATTER_POINT_CAP = 500_000  # matches Day 23's encode_points_binary() cap
+
+
+def compute_histogram(
+    file_path: str,
+    variable: str,
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+    bins: int = 30,
+) -> dict[str, Any]:
+    """
+    Computes a histogram (bin edges + counts) of valid pixel values within
+    a bounding box (Days 26-28). Reuses _get_subsetted_data() (Day 23) for
+    subsetting; binning happens backend-side (numpy.histogram) so only a
+    small bin-count array crosses the wire, consistent with this
+    project's established "don't ship raw pixel arrays without reason"
+    pattern (Day 23's PNG/binary raster encoding). For flat-grid files
+    with a time dimension, uses the first time step only (values[0]) —
+    the same simplification already applied to raster rendering on Day
+    23, kept consistent rather than introducing a second, different
+    time-collapsing convention.
+    """
+    subset = _get_subsetted_data(
+        file_path, variable, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+    values = subset["values"]
+    if values.ndim == 3:
+        values = values[0]
+
+    valid_values = values[~np.isnan(values)]
+    if valid_values.size == 0:
+        raise StatisticsError("No valid pixels in this region to build a histogram from")
+
+    counts, bin_edges = np.histogram(valid_values, bins=bins)
+
+    return {
+        "file_name": Path(file_path).name,
+        "variable": variable,
+        "bin_edges": bin_edges.tolist(),
+        "counts": counts.tolist(),
+        "valid_pixel_count": int(valid_values.size),
+        "mean": float(np.mean(valid_values)),
+        "std": float(np.std(valid_values)),
+    }
+
+
+def compute_scatter_correlation(
+    file_path: str,
+    variable_x: str,
+    variable_y: str,
+    lat_min: float, lat_max: float, lon_min: float, lon_max: float,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    quality_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Computes paired (x, y) samples for two variables over the same
+    bounding box, for scatter-plot parameter correlation (Days 26-28).
+    Both variables are subsetted independently via _get_subsetted_data()
+    using identical bbox/date/quality-flag parameters, which — since both
+    dispatch through the same structure-detection and cropping logic
+    against the same file — guarantees array shapes and per-pixel
+    positions line up 1:1 without any separate alignment step (verified
+    defensively below rather than assumed). Pixels invalid in EITHER
+    variable are excluded, since a correlation point needs both values.
+    Subsampled deterministically above SCATTER_POINT_CAP, reusing Day
+    23's exact stride-based (not random) subsampling convention so
+    results are reproducible across repeated identical queries. Same
+    values[0] time-collapsing convention as compute_histogram().
+    """
+    if variable_x == variable_y:
+        raise StatisticsError("Select two different variables to correlate")
+
+    subset_x = _get_subsetted_data(
+        file_path, variable_x, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+    subset_y = _get_subsetted_data(
+        file_path, variable_y, lat_min, lat_max, lon_min, lon_max,
+        start_date=start_date, end_date=end_date, quality_flags=quality_flags,
+    )
+
+    values_x = subset_x["values"]
+    values_y = subset_y["values"]
+    if values_x.ndim == 3:
+        values_x = values_x[0]
+    if values_y.ndim == 3:
+        values_y = values_y[0]
+
+    if values_x.shape != values_y.shape:
+        raise StatisticsError(
+            f"'{variable_x}' and '{variable_y}' have mismatched shapes "
+            f"({values_x.shape} vs {values_y.shape}) — cannot pair pixels"
+        )
+
+    valid_mask = ~np.isnan(values_x) & ~np.isnan(values_y)
+    if not valid_mask.any():
+        raise StatisticsError(
+            f"No pixels are valid in both '{variable_x}' and '{variable_y}' within this region"
+        )
+
+    x_valid = values_x[valid_mask]
+    y_valid = values_y[valid_mask]
+
+    total_pairs = int(x_valid.size)
+    if total_pairs > SCATTER_POINT_CAP:
+        stride = total_pairs // SCATTER_POINT_CAP
+        x_valid = x_valid[::stride]
+        y_valid = y_valid[::stride]
+
+    correlation = float(np.corrcoef(x_valid, y_valid)[0, 1]) if x_valid.size > 1 else None
+
+    return {
+        "file_name": Path(file_path).name,
+        "variable_x": variable_x,
+        "variable_y": variable_y,
+        "x": x_valid.tolist(),
+        "y": y_valid.tolist(),
+        "total_pair_count": total_pairs,
+        "returned_pair_count": int(x_valid.size),
+        "correlation": correlation,
+    }
+
+
 _netcdf_file_lock = threading.Lock()
 
 def compute_regional_stats_multivar(

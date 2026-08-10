@@ -20,6 +20,8 @@ import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
 import ColorLegend from "./components/ColorLegend/ColorLegend";
 import OpacitySlider from "./components/OpacitySlider/OpacitySlider";
 import TimeSeriesPanel from "./components/TimeSeriesPanel/TimeSeriesPanel";
+import HistogramPanel from "./components/HistogramPanel/HistogramPanel";
+import ScatterPanel from "./components/ScatterPanel/ScatterPanel";
 import "./App.css";
 
 function App() {
@@ -221,6 +223,20 @@ function App() {
             availableVariables={availableVariables}
             defaultBbox={mapBbox}
             supportsWithinFile={supportsTemporalFilter}
+          />
+          
+          <HistogramPanel
+            key={`histogram-${ingestedFilePath}`}
+            filePath={ingestedFilePath}
+            availableVariables={availableVariables}
+            defaultBbox={mapBbox}
+          />
+
+          <ScatterPanel
+            key={`scatter-${ingestedFilePath}`}
+            filePath={ingestedFilePath}
+            availableVariables={availableVariables}
+            defaultBbox={mapBbox}
           />
           
           <h2>Query Parameters</h2>

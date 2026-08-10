@@ -25,6 +25,7 @@ from processing.statistics import StatisticsError
 from processing.quality_mask import QualityMaskError
 from processing.statistics import compute_regional_stats_multivar, compute_regional_stats_cached
 from processing.statistics import compute_batch_timeseries, compute_timeseries_within_file
+from processing.statistics import compute_histogram, compute_scatter_correlation
 from processing.raster import compute_regional_raster, RasterError
 
 
@@ -216,6 +217,63 @@ def timeseries_within_file(
         return _sanitize(result)
     except (StatisticsError, IngestionError) as e:
         return {"error": str(e)}
+
+@app.get("/histogram")
+def get_histogram(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+    bins: int = 30,
+):
+    """
+    Days 26-28: histogram (bin edges + counts) of valid pixel values for
+    a variable over a bounding box — auxiliary plot alongside /stats.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        result = compute_histogram(
+            path, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+            bins=bins,
+        )
+        return _sanitize(result)
+    except (StatisticsError, QualityMaskError, IngestionError) as e:
+        return {"error": str(e)}
+
+
+@app.get("/scatter")
+def get_scatter(
+    path: str,
+    variable_x: str,
+    variable_y: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+):
+    """
+    Days 26-28: paired (x, y) samples for two variables over the same
+    bounding box, for scatter-plot parameter correlation.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        result = compute_scatter_correlation(
+            path, variable_x, variable_y, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+        return _sanitize(result)
+    except (StatisticsError, QualityMaskError, IngestionError) as e:
+        return {"error": str(e)}
+
 
 @app.get("/stats-multi")
 def stats_multi(
