@@ -1,18 +1,40 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  /* Design tokens (Day 29) — consolidates colors that were previously
+     hardcoded/inconsistent across component CSS files (e.g. #2563eb vs
+     #3b82f6 for the same accent role, #ccc/#ddd/#e0e0e0/#e2e2e2 for the
+     same border role) into one source of truth. */
+  --oc-font-sans: 'IBM Plex Sans', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --oc-font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --oc-navy-900: #10263b;
+  --oc-accent: #2563eb;
+  --oc-accent-hover: #1d4ed8;
+  --oc-accent-soft: rgba(37, 99, 235, 0.08);
+
+  --oc-page-bg: #eef1f4;
+  --oc-panel-bg: #ffffff;
+  --oc-border: #dbe1e8;
+
+  --oc-text: #16232f;
+  --oc-text-secondary: #55677a;
+
+  --oc-error-bg: rgba(239, 68, 68, 0.1);
+  --oc-error-text: #b91c1c;
+  --oc-error-border: rgba(239, 68, 68, 0.3);
+  --oc-success: #15803d;
+
+  --oc-radius-sm: 6px;
+  --oc-radius-md: 8px;
+
+  font-family: var(--oc-font-sans);
   font-size: 16px;
   line-height: 24px;
   font-weight: 400;
 
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  color: var(--oc-text);
+  background-color: var(--oc-page-bg);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,94 +45,165 @@
 
 .container {
   margin: 0;
-  padding-top: 10vh;
+  padding-top: 6vh;
+  padding-bottom: 4vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--oc-accent);
   text-decoration: inherit;
 }
 
 a:hover {
-  color: #535bf2;
+  color: var(--oc-accent-hover);
 }
 
 h1 {
   text-align: center;
+  font-family: var(--oc-font-sans);
+  color: var(--oc-navy-900);
+}
+
+/* Consistent section-header treatment across the whole app — applies
+   whether the <h2> is a direct panel child (TimeSeriesPanel,
+   HistogramPanel, ScatterPanel all share this via .timeseries-panel h2)
+   or a sibling in App.tsx (Map, Query Parameters), so no per-section
+   markup changes were needed to get one consistent look. */
+h2 {
+  font-family: var(--oc-font-sans);
+  font-weight: 600;
+  font-size: 1.3rem;
+  color: var(--oc-navy-900);
+  text-align: left;
+  max-width: 800px;
+  margin: 2rem auto 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--oc-accent);
 }
 
 input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
+button,
+select {
+  border-radius: var(--oc-radius-sm);
+  border: 1px solid var(--oc-border);
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+  font-family: var(--oc-font-sans);
+  color: var(--oc-text);
+  background-color: var(--oc-panel-bg);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 button {
   cursor: pointer;
+  border-color: var(--oc-accent);
+  color: var(--oc-accent);
+  font-weight: 600;
 }
 
-button:hover {
-  border-color: #396cd8;
+button:hover:not(:disabled) {
+  background-color: var(--oc-accent-soft);
 }
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
+button:active:not(:disabled) {
+  background-color: var(--oc-accent);
+  color: #fff;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--oc-accent);
+  outline-offset: 1px;
 }
 
 input,
-button {
+button,
+select {
   outline: none;
 }
 
-#greet-input {
-  margin-right: 5px;
+.map-controls {
+  max-width: 800px;
+  margin: 0 auto 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--oc-panel-bg);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-md);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.5rem;
+}
+.map-controls label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--oc-navy-900);
+}
+.map-controls select {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+.opacity-readout {
+  font-family: var(--oc-font-mono);
+  font-size: 0.85rem;
+  color: var(--oc-text-secondary);
+  min-width: 2.5em;
+}
+.inline-status {
+  font-size: 0.85rem;
+  color: var(--oc-text-secondary);
+}
+.inline-error {
+  font-size: 0.85rem;
+  color: var(--oc-error-text);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
+.status-line {
+  text-align: center;
+  color: var(--oc-text-secondary);
+}
 
-  a:hover {
-    color: #24c8db;
-  }
+.error-panel {
+  max-width: 800px;
+  margin: 1rem auto;
+  padding: 0.75rem 1rem;
+  border-radius: var(--oc-radius-sm);
+  background-color: var(--oc-error-bg);
+  color: var(--oc-error-text);
+  border: 1px solid var(--oc-error-border);
+  text-align: left;
+}
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+.stats-panel {
+  max-width: 800px;
+  margin: 1rem auto;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--oc-radius-md);
+  border: 1px solid var(--oc-border);
+  background: var(--oc-panel-bg);
+  box-shadow: 0 1px 3px rgba(16, 38, 59, 0.1);
+  text-align: left;
+}
+.stats-panel h3 {
+  margin-top: 0;
+  font-family: var(--oc-font-sans);
+  color: var(--oc-navy-900);
+}
+.stats-panel p {
+  font-family: var(--oc-font-mono);
+  font-size: 0.9rem;
+}
+.stats-panel p strong {
+  font-family: var(--oc-font-sans);
 }

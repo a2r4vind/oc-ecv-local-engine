@@ -1,28 +1,34 @@
 .timeseries-panel {
-  max-width: 640px;
+  max-width: 800px;
   margin: 2rem auto;
-  padding: 1.25rem;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-md);
+  background: var(--oc-panel-bg);
+  box-shadow: 0 1px 3px rgba(16, 38, 59, 0.1);
   text-align: left;
 }
-
+/* h2 inside this panel is styled by the global rule in App.css; this
+   just removes the global rule's centered max-width/margin so it sits
+   flush with the panel's own padding instead of the page column. */
+.timeseries-panel h2 {
+  margin: 0 0 1rem;
+  max-width: none;
+}
 .timeseries-mode-toggle {
   display: flex;
   gap: 1.5rem;
   margin-bottom: 0.75rem;
 }
-
 .timeseries-mode-toggle label {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   font-weight: 500;
 }
-
 .timeseries-note {
   font-size: 0.85rem;
-  color: #666;
+  color: var(--oc-text-secondary);
   margin-bottom: 0.75rem;
 }
 
@@ -45,8 +51,8 @@
 
 .bbox-fieldset,
 .date-fieldset {
-  border: 1px solid #e2e2e2;
-  border-radius: 6px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-sm);
   margin-bottom: 1rem;
   padding: 0.75rem;
 }
@@ -86,9 +92,9 @@
 .validation-error {
   margin-top: 0.75rem;
   padding: 0.6rem 0.9rem;
-  border-radius: 6px;
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--oc-radius-sm);
+  background-color: var(--oc-error-bg);
+  color: var(--oc-error-text);
+  border: 1px solid var(--oc-error-border);
   font-size: 0.9rem;
 }

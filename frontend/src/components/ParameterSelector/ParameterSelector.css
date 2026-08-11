@@ -1,43 +1,41 @@
 .parameter-selector {
-  max-width: 640px;
+  max-width: 800px;
   margin: 1.5rem auto 2rem;
   text-align: left;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-md);
+  background: var(--oc-panel-bg);
+  box-shadow: 0 1px 3px rgba(16, 38, 59, 0.1);
   padding: 1.25rem 1.5rem;
 }
-
 .field-group {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   margin-bottom: 1rem;
 }
-
 .field-group label {
   font-size: 0.85rem;
   font-weight: 600;
+  color: var(--oc-navy-900);
 }
-
 .field-group select {
   padding: 0.4rem 0.6rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  border-radius: var(--oc-radius-sm);
+  border: 1px solid var(--oc-border);
   font-size: 0.9rem;
 }
-
 fieldset {
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-sm);
   padding: 0.75rem 1rem 1rem;
   margin: 0 0 1rem;
 }
-
 legend {
   font-size: 0.8rem;
   font-weight: 600;
   padding: 0 0.4rem;
-  color: #555;
+  color: var(--oc-text-secondary);
 }
 
 .bbox-grid,
@@ -59,33 +57,27 @@ legend {
 .bbox-grid input,
 .date-grid input {
   padding: 0.4rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  border-radius: var(--oc-radius-sm);
+  border: 1px solid var(--oc-border);
+  font-family: var(--oc-font-mono);
   font-size: 0.9rem;
 }
-
 .temporal-note {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--oc-text-secondary);
   font-style: italic;
   margin: 0 0 1rem;
 }
-
 .validation-error {
   margin-bottom: 1rem;
   padding: 0.6rem 0.9rem;
-  border-radius: 6px;
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--oc-radius-sm);
+  background-color: var(--oc-error-bg);
+  color: var(--oc-error-text);
+  border: 1px solid var(--oc-error-border);
   font-size: 0.85rem;
 }
-
 .parameter-selector button[type="submit"] {
   padding: 0.55rem 1.4rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  cursor: pointer;
   font-size: 0.95rem;
-  font-weight: 600;
 }

@@ -1,10 +1,11 @@
 .map-view {
   width: 100%;
-  max-width: 640px;
-  height: 360px;
-  border-radius: 8px;
+  max-width: 800px;
+  height: 420px;
+  border-radius: var(--oc-radius-md);
   overflow: hidden;
-  border: 1px solid #ddd;
+  border: 1px solid var(--oc-border);
+  box-shadow: 0 1px 3px rgba(16, 38, 59, 0.1);
   margin: 1rem auto;
   align-self: center;
 }

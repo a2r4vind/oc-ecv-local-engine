@@ -5,36 +5,32 @@
 }
 
 .drop-zone {
-  border: 2px dashed #888;
-  border-radius: 8px;
+  border: 2px dashed var(--oc-border);
+  border-radius: var(--oc-radius-md);
   padding: 2.5rem 1.5rem;
   text-align: center;
+  background: var(--oc-panel-bg);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-
 .drop-zone.drag-over {
-  border-color: #3b82f6;
-  background-color: rgba(59, 130, 246, 0.08);
+  border-color: var(--oc-accent);
+  background-color: var(--oc-accent-soft);
 }
-
 .drop-zone-or {
   margin: 0.5rem 0;
-  color: #888;
+  color: var(--oc-text-secondary);
   font-size: 0.85rem;
 }
-
 .drop-zone button {
   padding: 0.5rem 1.25rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+  border-radius: var(--oc-radius-sm);
   cursor: pointer;
   font-size: 0.95rem;
 }
-
 .status-line {
   margin-top: 1rem;
   text-align: center;
-  color: #666;
+  color: var(--oc-text-secondary);
 }
 
 .error-box {
@@ -49,23 +45,23 @@
 .result-panel {
   margin-top: 1.5rem;
   padding: 1rem 1.25rem;
-  border-radius: 8px;
-  border: 1px solid #ddd;
+  border-radius: var(--oc-radius-md);
+  border: 1px solid var(--oc-border);
+  background: var(--oc-panel-bg);
   text-align: left;
 }
-
 .result-panel h3 {
   margin-top: 0;
   word-break: break-all;
+  font-family: var(--oc-font-mono);
+  color: var(--oc-navy-900);
 }
-
 .result-panel p {
   margin: 0.4rem 0;
   font-size: 0.9rem;
 }
-
 .valid-tag {
-  color: #15803d;
+  color: var(--oc-success);
   font-weight: 600;
 }
 

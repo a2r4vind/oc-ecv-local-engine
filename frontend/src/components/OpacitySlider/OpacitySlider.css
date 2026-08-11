@@ -2,7 +2,7 @@
   position: relative;
   width: 140px;
   height: 4px;
-  background: #cbd5e1;
+  background: var(--oc-border);
   border-radius: 2px;
   margin: 0 0.5rem;
   display: inline-block;
@@ -10,30 +10,27 @@
   cursor: pointer;
   touch-action: none;
 }
-
 .opacity-slider-fill {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  background: #2563eb;
+  background: var(--oc-accent);
   border-radius: 2px;
   pointer-events: none;
 }
-
 .opacity-slider-thumb {
   position: absolute;
   top: 50%;
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #2563eb;
+  background: var(--oc-accent);
   transform: translate(-50%, -50%);
   pointer-events: none;
   box-shadow: 0 0 0 2px white;
 }
-
 .opacity-slider-track:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--oc-accent);
   outline-offset: 2px;
 }

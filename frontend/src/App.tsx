@@ -1,6 +1,4 @@
 import { useState, useMemo } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
 import FileUploader from "./components/FileUploader/FileUploader";
 import ParameterSelector, {
   type QueryParams,
@@ -25,8 +23,6 @@ import ScatterPanel from "./components/ScatterPanel/ScatterPanel";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
 
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
   const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
@@ -42,10 +38,6 @@ function App() {
   const [colormap, setColormap] = useState<ColormapName>("viridis");
   const [opacity, setOpacity] = useState(1);
   const [queriedVariable, setQueriedVariable] = useState<string | null>(null);
-
-  async function greet() {
-    setGreetMsg(await invoke("greet", { name }));
-  }
 
   function handleIngested(filePath: string, result: IngestionResult) {
     setIngestedFilePath(filePath);
@@ -135,47 +127,16 @@ function App() {
 
   return (
     <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <h1>OC-ECV Local Engine</h1>
 
-      <hr style={{ margin: "2rem 0" }} />
-
-      <h2>OC-ECV File Ingestion</h2>
+      <h2>File Ingestion</h2>
       <FileUploader onIngested={handleIngested} />
 
       {ingestedFilePath && availableVariables.length > 0 && (
         <>
           <h2>Map</h2>
-          <div style={{ maxWidth: 640, margin: "0 auto 0.5rem", textAlign: "left" }}>
-            <label htmlFor="colormap-select" style={{ marginRight: "0.5rem" }}>
-              Colormap:
-            </label>
+          <div className="map-controls">
+            <label htmlFor="colormap-select">Colormap:</label>
             <select
               id="colormap-select"
               value={colormap}
@@ -187,20 +148,17 @@ function App() {
                 </option>
               ))}
             </select>
-            
-            <label htmlFor="opacity-slider" style={{ marginLeft: "1rem", marginRight: "0.5rem" }}>
-              Opacity:
-            </label>
+
+            <label htmlFor="opacity-slider">Opacity:</label>
             <OpacitySlider
               value={Math.round(opacity * 100)}
               onChange={(v) => setOpacity(v / 100)}
             />
-            <span style={{ marginLeft: "0.35rem" }}>{Math.round(opacity * 100)}%</span>
-            {rasterLoading && <span style={{ marginLeft: "0.75rem" }}>Loading raster…</span>}
-            {rasterError && (
-              <span style={{ marginLeft: "0.75rem", color: "#b91c1c" }}>⚠ {rasterError}</span>
-            )}
+            <span className="opacity-readout">{Math.round(opacity * 100)}%</span>
+            {rasterLoading && <span className="inline-status">Loading raster…</span>}
+            {rasterError && <span className="inline-error">⚠ {rasterError}</span>}
           </div>
+          
           <MapView
             bbox={mapBbox}
             spatialBounds={spatialBounds}
@@ -251,38 +209,12 @@ function App() {
         </>
       )}
 
-      {statsLoading && (
-        <p style={{ textAlign: "center" }}>Computing statistics…</p>
-      )}
+      {statsLoading && <p className="status-line">Computing statistics…</p>}
 
-      {statsError && (
-        <div
-          style={{
-            maxWidth: 640,
-            margin: "1rem auto",
-            padding: "0.75rem 1rem",
-            borderRadius: 6,
-            backgroundColor: "rgba(239, 68, 68, 0.1)",
-            color: "#b91c1c",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            textAlign: "left",
-          }}
-        >
-          ⚠ {statsError}
-        </div>
-      )}
+      {statsError && <div className="error-panel">⚠ {statsError}</div>}
 
       {statsResult && !statsError && (
-        <div
-          style={{
-            maxWidth: 640,
-            margin: "1rem auto",
-            padding: "1rem 1.25rem",
-            borderRadius: 8,
-            border: "1px solid #ddd",
-            textAlign: "left",
-          }}
-        >
+        <div className="stats-panel">
           <h3>
             Statistics: {statsResult.variable} ({statsResult.file_name})
           </h3>
