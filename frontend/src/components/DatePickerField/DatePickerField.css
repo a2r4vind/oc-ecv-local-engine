@@ -19,17 +19,22 @@
   font-size: 0.9rem;
   min-width: 0;
 }
+
 .calendar-toggle-btn {
-  padding: 0.3rem 0.5rem;
+  padding: 0.4rem;
   border-radius: var(--oc-radius-sm);
   border: 1px solid var(--oc-border);
   background: #fff;
   cursor: pointer;
-  font-size: 0.95rem;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--oc-navy-900);
   appearance: none;
   -webkit-appearance: none;
 }
+
 .calendar-popup {
   position: absolute;
   top: calc(100% + 4px);

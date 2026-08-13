@@ -10,7 +10,7 @@ export default function ScatterChart({ data }: ScatterChartProps) {
     (data.total_pair_count ?? 0) > (data.returned_pair_count ?? 0);
 
   return (
-    <div style={{ maxWidth: 800, margin: "1rem auto" }}>
+    <div className="chart-wrapper">
       <Plot
         data={[
           {

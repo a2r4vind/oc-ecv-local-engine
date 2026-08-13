@@ -13,7 +13,7 @@ export default function TimeSeriesChart({ data, variable, title }: TimeSeriesCha
   const anomalies = data.points.map((p) => p.anomaly);
 
   return (
-    <div style={{ maxWidth: 800, margin: "1rem auto" }}>
+    <div className="chart-wrapper">
       <Plot
         data={[
           {

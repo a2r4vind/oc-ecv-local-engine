@@ -23,6 +23,9 @@ interface ParameterSelectorProps {
   onBboxChange?: (
     bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
   ) => void;
+  // Phase B: this file's own valid date coverage, shown next to the
+  // date fields so the user knows what range is actually queryable.
+  validDateRange?: { min: string; max: string } | null;
 }
 
 export default function ParameterSelector({
@@ -31,6 +34,7 @@ export default function ParameterSelector({
   supportsTemporalFilter,
   onSubmit,
   onBboxChange,
+  validDateRange,
 }: ParameterSelectorProps) {
   const [variable, setVariable] = useState(availableVariables[0] || "");
   const [latMin, setLatMin] = useState("");
@@ -199,6 +203,11 @@ export default function ParameterSelector({
       {supportsTemporalFilter ? (
         <fieldset className="date-fieldset">
           <legend>Date Range (optional)</legend>
+          {validDateRange && (
+            <p className="valid-range-note">
+              Valid range: {validDateRange.min} to {validDateRange.max}
+            </p>
+          )}
           <div className="date-grid">
             <DatePickerField label="Start date" value={startDate} onChange={setStartDate} />
             <DatePickerField label="End date" value={endDate} onChange={setEndDate} />

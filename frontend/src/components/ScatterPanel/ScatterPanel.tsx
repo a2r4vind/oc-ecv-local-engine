@@ -1,37 +1,57 @@
 import { useState } from "react";
-import ScatterChart from "../ScatterChart/ScatterChart";
 import { fetchScatter, type ScatterResult } from "../../services/backendApi";
 import "../TimeSeriesPanel/TimeSeriesPanel.css";
 
 interface ScatterPanelProps {
   filePath: string;
   availableVariables: string[];
-  defaultBbox: {
-    latMin: number;
-    latMax: number;
-    lonMin: number;
-    lonMax: number;
-  } | null;
+  onResult: (result: ScatterResult | null) => void;
+  onBboxChange?: (
+    bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
+  ) => void;
 }
 
 export default function ScatterPanel({
   filePath,
   availableVariables,
-  defaultBbox,
+  onResult,
+  onBboxChange,
 }: ScatterPanelProps) {
   const [variableX, setVariableX] = useState(availableVariables[0] || "");
   const [variableY, setVariableY] = useState(
     availableVariables[1] || availableVariables[0] || ""
   );
 
-  const [latMin, setLatMin] = useState(defaultBbox ? String(defaultBbox.latMin) : "");
-  const [latMax, setLatMax] = useState(defaultBbox ? String(defaultBbox.latMax) : "");
-  const [lonMin, setLonMin] = useState(defaultBbox ? String(defaultBbox.lonMin) : "");
-  const [lonMax, setLonMax] = useState(defaultBbox ? String(defaultBbox.lonMax) : "");
+  const [latMin, setLatMin] = useState("");
+  const [latMax, setLatMax] = useState("");
+  const [lonMin, setLonMin] = useState("");
+  const [lonMax, setLonMax] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScatterResult | null>(null);
+
+  function emitBboxChange(next: {
+    latMin?: string;
+    latMax?: string;
+    lonMin?: string;
+    lonMax?: string;
+  }) {
+    if (!onBboxChange) return;
+    const values = {
+      latMin: next.latMin ?? latMin,
+      latMax: next.latMax ?? latMax,
+      lonMin: next.lonMin ?? lonMin,
+      lonMax: next.lonMax ?? lonMax,
+    };
+    const parsed = {
+      latMin: parseFloat(values.latMin),
+      latMax: parseFloat(values.latMax),
+      lonMin: parseFloat(values.lonMin),
+      lonMax: parseFloat(values.lonMax),
+    };
+    const allValid = Object.values(parsed).every((v) => !Number.isNaN(v));
+    onBboxChange(allValid ? parsed : null);
+  }
 
   function parseBboxOrError() {
     const lm = parseFloat(latMin);
@@ -51,7 +71,7 @@ export default function ScatterPanel({
 
   async function handlePlot() {
     setError(null);
-    setResult(null);
+    onResult(null);
 
     if (!variableX || !variableY) {
       setError("Select two variables.");
@@ -78,7 +98,7 @@ export default function ScatterPanel({
       if (res.error) {
         setError(res.error);
       } else {
-        setResult(res);
+        onResult(res);
       }
     } catch (err) {
       setError(
@@ -128,19 +148,51 @@ export default function ScatterPanel({
         <div className="bbox-grid">
           <label>
             Lat min
-            <input type="number" step="any" value={latMin} onChange={(e) => setLatMin(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={latMin}
+              onChange={(e) => {
+                setLatMin(e.target.value);
+                emitBboxChange({ latMin: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lat max
-            <input type="number" step="any" value={latMax} onChange={(e) => setLatMax(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={latMax}
+              onChange={(e) => {
+                setLatMax(e.target.value);
+                emitBboxChange({ latMax: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lon min
-            <input type="number" step="any" value={lonMin} onChange={(e) => setLonMin(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={lonMin}
+              onChange={(e) => {
+                setLonMin(e.target.value);
+                emitBboxChange({ lonMin: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lon max
-            <input type="number" step="any" value={lonMax} onChange={(e) => setLonMax(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={lonMax}
+              onChange={(e) => {
+                setLonMax(e.target.value);
+                emitBboxChange({ lonMax: e.target.value });
+              }}
+            />
           </label>
         </div>
       </fieldset>
@@ -150,8 +202,6 @@ export default function ScatterPanel({
       </button>
 
       {error && <div className="validation-error">⚠ {error}</div>}
-
-      {result && <ScatterChart data={result} />}
     </div>
   );
 }

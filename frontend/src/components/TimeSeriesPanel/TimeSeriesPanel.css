@@ -32,6 +32,14 @@
   margin-bottom: 0.75rem;
 }
 
+.valid-range-note {
+  font-size: 0.78rem;
+  font-family: var(--oc-font-mono);
+  color: var(--oc-text-secondary);
+  margin: 0 0 0.6rem;
+}
+
+
 .field-group {
   margin-bottom: 1rem;
 }

@@ -15,7 +15,7 @@ export default function HistogramChart({ data, variable }: HistogramChartProps) 
   const widths = counts.map((_, i) => edges[i + 1] - edges[i]);
 
   return (
-    <div style={{ maxWidth: 800, margin: "1rem auto" }}>
+    <div className="chart-wrapper">
       <Plot
         data={[
           {

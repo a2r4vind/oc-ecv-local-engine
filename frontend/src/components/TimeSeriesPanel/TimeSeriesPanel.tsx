@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import DatePickerField from "../DatePickerField/DatePickerField";
-import TimeSeriesChart from "../TimeSeriesChart/TimeSeriesChart";
 import {
   fetchTimeseriesWithinFile,
   fetchBatchTimeseries,
@@ -18,29 +17,64 @@ type Mode = "within-file" | "batch";
 interface TimeSeriesPanelProps {
   filePath: string;
   availableVariables: string[];
-  defaultBbox: {
-    latMin: number;
-    latMax: number;
-    lonMin: number;
-    lonMax: number;
-  } | null;
   supportsWithinFile: boolean; // false for swath files (single time window)
+  // Reports the plotted result upward instead of rendering it inline —
+  // AppShell displays it in the persistent right-side results area.
+  onResult: (
+    result: { data: NormalizedTimeSeries; variable: string; title: string } | null
+  ) => void;
+  // Option A (isolated per-panel bbox): reports this panel's own bbox
+  // upward so the map's overlay rectangle can reflect it while this
+  // panel/mode is active — independent of every other panel's bbox.
+  onBboxChange?: (
+    bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
+  ) => void;
+  // Phase B: this file's own valid date coverage — only meaningful for
+  // "within this file" mode, since batch mode's range spans whatever
+  // files exist in a chosen directory, not this one file's own steps.
+  validDateRange?: { min: string; max: string } | null;
 }
 
 export default function TimeSeriesPanel({
   filePath,
   availableVariables,
-  defaultBbox,
   supportsWithinFile,
+  onResult,
+  onBboxChange,
+  validDateRange,
 }: TimeSeriesPanelProps) {
+
   const [mode, setMode] = useState<Mode>(supportsWithinFile ? "within-file" : "batch");
   const [variable, setVariable] = useState(availableVariables[0] || "");
+  
+  const [latMin, setLatMin] = useState("");
+  const [latMax, setLatMax] = useState("");
+  const [lonMin, setLonMin] = useState("");
+  const [lonMax, setLonMax] = useState("");
 
-  const [latMin, setLatMin] = useState(defaultBbox ? String(defaultBbox.latMin) : "");
-  const [latMax, setLatMax] = useState(defaultBbox ? String(defaultBbox.latMax) : "");
-  const [lonMin, setLonMin] = useState(defaultBbox ? String(defaultBbox.lonMin) : "");
-  const [lonMax, setLonMax] = useState(defaultBbox ? String(defaultBbox.lonMax) : "");
-
+  function emitBboxChange(next: {
+    latMin?: string;
+    latMax?: string;
+    lonMin?: string;
+    lonMax?: string;
+  }) {
+    if (!onBboxChange) return;
+    const values = {
+      latMin: next.latMin ?? latMin,
+      latMax: next.latMax ?? latMax,
+      lonMin: next.lonMin ?? lonMin,
+      lonMax: next.lonMax ?? lonMax,
+    };
+    const parsed = {
+      latMin: parseFloat(values.latMin),
+      latMax: parseFloat(values.latMax),
+      lonMin: parseFloat(values.lonMin),
+      lonMax: parseFloat(values.lonMax),
+    };
+    const allValid = Object.values(parsed).every((v) => !Number.isNaN(v));
+    onBboxChange(allValid ? parsed : null);
+  }
+  
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -48,7 +82,6 @@ export default function TimeSeriesPanel({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<NormalizedTimeSeries | null>(null);
 
   async function pickDirectory() {
     try {
@@ -78,10 +111,10 @@ export default function TimeSeriesPanel({
     }
     return { latMin: lm, latMax: lx, lonMin: om, lonMax: ox };
   }
-
+  
   async function handlePlot() {
     setError(null);
-    setChartData(null);
+    onResult(null);
 
     if (!variable) {
       setError("Select a variable.");
@@ -106,7 +139,11 @@ export default function TimeSeriesPanel({
         if (result.error) {
           setError(result.error);
         } else {
-          setChartData(normalizeWithinFileResult(result));
+          onResult({
+            data: normalizeWithinFileResult(result),
+            variable,
+            title: "Within-File Time Series",
+          });
         }
       } else {
         if (!directory) {
@@ -132,7 +169,11 @@ export default function TimeSeriesPanel({
         if (result.error) {
           setError(result.error);
         } else {
-          setChartData(normalizeBatchResult(result));
+          onResult({
+            data: normalizeBatchResult(result),
+            variable,
+            title: "Batch Time Series",
+          });
         }
       }
     } catch (err) {
@@ -141,6 +182,8 @@ export default function TimeSeriesPanel({
       setLoading(false);
     }
   }
+  
+
 
   return (
     <div className="timeseries-panel">
@@ -193,21 +236,53 @@ export default function TimeSeriesPanel({
       <fieldset className="bbox-fieldset">
         <legend>Bounding Box</legend>
         <div className="bbox-grid">
-          <label>
+           <label>
             Lat min
-            <input type="number" step="any" value={latMin} onChange={(e) => setLatMin(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={latMin}
+              onChange={(e) => {
+                setLatMin(e.target.value);
+                emitBboxChange({ latMin: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lat max
-            <input type="number" step="any" value={latMax} onChange={(e) => setLatMax(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={latMax}
+              onChange={(e) => {
+                setLatMax(e.target.value);
+                emitBboxChange({ latMax: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lon min
-            <input type="number" step="any" value={lonMin} onChange={(e) => setLonMin(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={lonMin}
+              onChange={(e) => {
+                setLonMin(e.target.value);
+                emitBboxChange({ lonMin: e.target.value });
+              }}
+            />
           </label>
           <label>
             Lon max
-            <input type="number" step="any" value={lonMax} onChange={(e) => setLonMax(e.target.value)} />
+            <input
+              type="number"
+              step="any"
+              value={lonMax}
+              onChange={(e) => {
+                setLonMax(e.target.value);
+                emitBboxChange({ lonMax: e.target.value });
+              }}
+            />
           </label>
         </div>
       </fieldset>
@@ -226,6 +301,11 @@ export default function TimeSeriesPanel({
 
       <fieldset className="date-fieldset">
         <legend>Date Range {mode === "batch" ? "(required)" : "(optional)"}</legend>
+        {mode === "within-file" && validDateRange && (
+          <p className="valid-range-note">
+            Valid range: {validDateRange.min} to {validDateRange.max}
+          </p>
+        )}
         <div className="date-grid">
           <DatePickerField label="Start date" value={startDate} onChange={setStartDate} />
           <DatePickerField label="End date" value={endDate} onChange={setEndDate} />
@@ -237,14 +317,6 @@ export default function TimeSeriesPanel({
       </button>
 
       {error && <div className="validation-error">⚠ {error}</div>}
-
-      {chartData && (
-        <TimeSeriesChart
-          data={chartData}
-          variable={variable}
-          title={mode === "within-file" ? "Within-File Time Series" : "Batch Time Series"}
-        />
-      )}
     </div>
   );
 }

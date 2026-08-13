@@ -68,6 +68,14 @@ legend {
   font-style: italic;
   margin: 0 0 1rem;
 }
+
+.valid-range-note {
+  font-size: 0.78rem;
+  font-family: var(--oc-font-mono);
+  color: var(--oc-text-secondary);
+  margin: 0 0 0.6rem;
+}
+
 .validation-error {
   margin-bottom: 1rem;
   padding: 0.6rem 0.9rem;

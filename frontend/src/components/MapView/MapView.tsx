@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Map, useControl, type MapRef } from "react-map-gl/maplibre";
 import { setWorkerUrl } from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
@@ -80,13 +80,28 @@ function isValidBbox(bbox: MapBbox | null): bbox is MapBbox {
 
 export default function MapView({ bbox, spatialBounds, rasterResult, colormap, opacity }: MapViewProps) {
   const mapRef = useRef<MapRef | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // Tracks which spatialBounds object we've successfully fit the view
+  // to, so repeated resize events don't keep forcing the view back to
+  // the file's full extent — only a genuinely new file (new
+  // spatialBounds reference) should trigger a re-fit.
+  const lastFittedRef = useRef<SpatialBounds | null>(null);
+  // Root cause (corrected from the earlier font-loading theory, which
+  // wasn't the actual issue): react-map-gl's Map fires onLoad once
+  // MapLibre's internal style/tile/GL context is genuinely ready.
+  // Calling fitBounds()/resize() before that is a known source of
+  // silent, intermittent no-ops — this is why it "sometimes" worked
+  // (whenever onLoad happened to have already fired by the time our
+  // effect ran) and why it always looked correct after Run Query (by
+  // then, plenty of time/reflows had passed for onLoad to have long
+  // since fired). Gating on this actual readiness signal, instead of
+  // guessing at generic resize/font timing, targets the real race.
+  const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Auto-zoom to the ingested file's spatial extent whenever it changes
-  // (new file loaded).
-  useEffect(() => {
-    if (!spatialBounds || !mapRef.current) return;
-    const [latMin, latMax] = spatialBounds.latRange;
-    const [lonMin, lonMax] = spatialBounds.lonRange;
+  function fitToBounds(bounds: SpatialBounds) {
+    if (!mapRef.current) return;
+    const [latMin, latMax] = bounds.latRange;
+    const [lonMin, lonMax] = bounds.lonRange;
     if (![latMin, latMax, lonMin, lonMax].every(Number.isFinite)) return;
 
     mapRef.current.fitBounds(
@@ -96,7 +111,41 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
       ],
       { padding: 40, duration: 600 }
     );
-  }, [spatialBounds]);
+    lastFittedRef.current = bounds;
+  }
+
+  // Ongoing safety net for layout shifts after the map has loaded
+  // (sidebar content height changes, window resize) — still useful on
+  // top of the onLoad gate below, since container size can still change
+  // after initial load.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !mapLoaded) return;
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.resize();
+      if (spatialBounds && lastFittedRef.current !== spatialBounds) {
+        fitToBounds(spatialBounds);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [spatialBounds, mapLoaded]);
+
+  // Auto-zoom to the ingested file's spatial extent — gated on
+  // mapLoaded so this never fires before MapLibre's GL context/style
+  // are actually ready. requestAnimationFrame (double-wrapped) waits
+  // for the browser to have painted at least one frame post-load,
+  // giving the container's final flex-determined size time to be
+  // reflected before we ask MapLibre to resize/fit against it.
+  useEffect(() => {
+    if (!spatialBounds || !mapLoaded) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        mapRef.current?.resize();
+        fitToBounds(spatialBounds);
+      });
+    });
+  }, [spatialBounds, mapLoaded]);
 
   // Recolor the fetched grayscale+alpha bitmap against the active
   // colormap. Memoized on [rasterResult, colormap] specifically — without
@@ -190,12 +239,13 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
   }
 
   return (
-    <div className="map-view">
+    <div className="map-view" ref={containerRef}>
       <Map
         ref={mapRef}
         initialViewState={{ longitude: 72, latitude: 18, zoom: 3 }}
         style={{ width: "100%", height: "100%" }}
         mapStyle={BASE_STYLE}
+        onLoad={() => setMapLoaded(true)}
       >
         <DeckGLOverlay layers={layers} />
       </Map>

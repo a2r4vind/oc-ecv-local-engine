@@ -207,3 +207,147 @@ select {
 .stats-panel p strong {
   font-family: var(--oc-font-sans);
 }
+
+.loaded-file-bar {
+  max-width: 800px;
+  margin: 1rem auto;
+  padding: 0.6rem 1rem;
+  background: var(--oc-navy-900);
+  color: #fff;
+  border-radius: var(--oc-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.loaded-file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.loaded-file-bar button {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+/* Both flex (flex: 1) and CSS Grid (1fr) "flexible track" sizing
+   produced the identical bug on this WebKitGTK build: main-area
+   collapses to ~2px on initial paint and only self-corrects once an
+   unrelated later DOM mutation (Plotly's chart injection) forces a
+   fresh layout pass. That both of two different flexible-sizing
+   algorithms failed identically points at the sizing ALGORITHM itself
+   being unreliable here, not a config mistake in either attempt.
+   Sidestepping it entirely: .main-area gets an explicit calc() width
+   instead of a negotiated/flexible one — calc() is static arithmetic,
+   not a sizing algorithm, so there's nothing for WebKit to compute
+   incorrectly on first paint. */
+.app-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  max-width: 1400px;
+  margin: 1rem auto 3rem;
+  padding: 0 1rem;
+  text-align: left;
+}
+
+.sidebar {
+  width: 420px;
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.main-area {
+  /*width: calc(100% - 420px - 1.5rem);
+  flex: none;
+  min-width: 0;*/
+  width: 100em;
+}
+
+.mode-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid var(--oc-border);
+}
+.mode-tab {
+  flex: 1;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--oc-text-secondary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+.mode-tab:hover:not(.active) {
+  background: var(--oc-accent-soft);
+  color: var(--oc-accent);
+}
+.mode-tab.active {
+  color: var(--oc-accent);
+  border-bottom-color: var(--oc-accent);
+}
+.mode-tab:active {
+  background: transparent;
+  color: var(--oc-accent);
+}
+
+/* Panels (.timeseries-panel / .parameter-selector) already carry their
+   own border/shadow/max-width designed for the old full-width centered
+   layout — reset those specifically inside the sidebar so they sit flush
+   against the sidebar's own edges instead of double-bordering /
+   double-centering. */
+.sidebar-panel-item .timeseries-panel,
+.sidebar-panel-item .parameter-selector {
+  max-width: none;
+  margin: 0;
+  box-shadow: none;
+}
+
+/* Option A: all four panels stay mounted permanently so their state
+   (bbox, variable selections, etc.) persists across tab switches —
+   only display is toggled, never mount/unmount. Adjacent mounted-but-
+   hidden panels are stacked via display:none rather than removed. */
+.sidebar-panel-item.hidden {
+  display: none;
+}
+
+/* Sidebar is narrower than the panels' original full-width design
+   (Days 25-28) — stack bbox and date-range fields one-per-row here
+   instead of the original two-column grid, so each field has
+   comfortable room rather than being squeezed two-per-row into 420px. */
+.sidebar-panel-item .bbox-grid,
+.sidebar-panel-item .date-grid {
+  grid-template-columns: 1fr;
+}
+
+.main-area .map-controls,
+.main-area .map-view,
+.main-area .color-legend {
+  max-width: none;
+}
+
+.results-area {
+  margin-top: 1rem;
+}
+
+.chart-wrapper {
+  width: 100%;
+  margin: 0;
+}
+
+.results-area .stats-panel,
+.results-area .error-panel {
+  max-width: none;
+  margin: 0;
+}
