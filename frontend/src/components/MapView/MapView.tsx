@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Map, useControl, type MapRef } from "react-map-gl/maplibre";
 import { setWorkerUrl } from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { PolygonLayer, BitmapLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { BitmapLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { Layer } from "@deck.gl/core";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { recolorBitmap, getColor, type ColormapName } from "../../utils/colormaps";
 import type { RasterResult } from "../../services/backendApi";
+import { BboxDrawTool, type LatLonBbox } from "./BboxDrawTool";
+import { MapToolbar, type MapTool, type PanDirection } from "./MapToolbar";
+import { addOrUpdateGraticule, removeGraticule } from "./Graticule";
 import "./MapView.css";
 
 // MapLibre GL v6 ships ESM-only and requires the worker URL to be wired
@@ -33,33 +36,26 @@ export interface SpatialBounds {
 }
 
 interface MapViewProps {
-  // Current query bounding box (from ParameterSelector), or null if not
-  // yet fully specified — drawn as an overlay rectangle when valid.
+  // Current panel's bounding box (Option A: whichever sidebar panel is
+  // active owns this value in App.tsx's bboxByMode). null if not yet set.
   bbox: MapBbox | null;
+  // Phase C: fires when the user draws/edits the rectangle directly on
+  // the map (terra-draw), so App.tsx can write it into the active panel's
+  // bboxByMode slot and keep the numeric fields in sync.
+  onBboxChange: (bbox: MapBbox | null) => void;
   // Ingested file's own spatial extent (from IngestionResult.metadata),
   // used to auto-fit the map view once a file loads.
   spatialBounds: SpatialBounds | null;
   // Day 23: fetched pixel-level data from /raster, rendered as a
-  // BitmapLayer (flat-grid) or ScatterplotLayer (swath) beneath the bbox
-  // rectangle. null until "Run Query" is submitted.
+  // BitmapLayer (flat-grid) or ScatterplotLayer (swath).
   rasterResult: RasterResult | null;
-  // Active colormap — applied client-side against rasterResult, never
-  // requires a backend re-fetch when changed.
   colormap: ColormapName;
-  // Day 24: layer opacity (0-1), applied on top of each pixel/point's
-  // own validity-derived alpha — masked/invalid data stays invisible
-  // regardless of this value; it only affects how strongly VALID data
-  // shows through the base map underneath.
   opacity: number;
 }
 
-// Bridges deck.gl into the MapLibre map instance. Uses overlaid mode
-// (interleaved: false) — deck.gl renders into its own separate canvas
-// rather than sharing MapLibre's internal WebGL2 context/transform every
-// frame. Chosen on Day 22 after interleaved mode produced repeated
-// "map.transform.height" errors against this maplibre-gl v6 / deck.gl
-// v9.3.7 pairing — overlaid mode doesn't read MapLibre's internals
-// per-frame, so it's far less exposed to that version-skew.
+// Bridges deck.gl into the MapLibre map instance. Overlaid mode
+// (interleaved: false) — see Day 22 for why interleaved mode was rejected
+// (maplibre-gl v6 / deck.gl v9.3.7 version-skew).
 function DeckGLOverlay({ layers }: { layers: Layer[] }) {
   const overlay = useControl<MapboxOverlay>(
     () => new MapboxOverlay({ interleaved: false, layers })
@@ -68,35 +64,49 @@ function DeckGLOverlay({ layers }: { layers: Layer[] }) {
   return null;
 }
 
-function isValidBbox(bbox: MapBbox | null): bbox is MapBbox {
-  if (!bbox) return false;
-  const { latMin, latMax, lonMin, lonMax } = bbox;
+function toLatLonBbox(bbox: MapBbox): LatLonBbox {
+  return { minLat: bbox.latMin, maxLat: bbox.latMax, minLon: bbox.lonMin, maxLon: bbox.lonMax };
+}
+
+function toMapBbox(bbox: LatLonBbox): MapBbox {
+  return { latMin: bbox.minLat, latMax: bbox.maxLat, lonMin: bbox.minLon, lonMax: bbox.maxLon };
+}
+
+function bboxRoughlyEqual(a: LatLonBbox | null, b: LatLonBbox | null): boolean {
+  if (a === null || b === null) return a === b;
+  const EPS = 1e-6;
   return (
-    [latMin, latMax, lonMin, lonMax].every((v) => Number.isFinite(v)) &&
-    latMin < latMax &&
-    lonMin < lonMax
+    Math.abs(a.minLat - b.minLat) < EPS &&
+    Math.abs(a.maxLat - b.maxLat) < EPS &&
+    Math.abs(a.minLon - b.minLon) < EPS &&
+    Math.abs(a.maxLon - b.maxLon) < EPS
   );
 }
 
-export default function MapView({ bbox, spatialBounds, rasterResult, colormap, opacity }: MapViewProps) {
+export default function MapView({
+  bbox,
+  onBboxChange,
+  spatialBounds,
+  rasterResult,
+  colormap,
+  opacity,
+}: MapViewProps) {
   const mapRef = useRef<MapRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // Tracks which spatialBounds object we've successfully fit the view
-  // to, so repeated resize events don't keep forcing the view back to
-  // the file's full extent — only a genuinely new file (new
-  // spatialBounds reference) should trigger a re-fit.
   const lastFittedRef = useRef<SpatialBounds | null>(null);
-  // Root cause (corrected from the earlier font-loading theory, which
-  // wasn't the actual issue): react-map-gl's Map fires onLoad once
-  // MapLibre's internal style/tile/GL context is genuinely ready.
-  // Calling fitBounds()/resize() before that is a known source of
-  // silent, intermittent no-ops — this is why it "sometimes" worked
-  // (whenever onLoad happened to have already fired by the time our
-  // effect ran) and why it always looked correct after Run Query (by
-  // then, plenty of time/reflows had passed for onLoad to have long
-  // since fired). Gating on this actual readiness signal, instead of
-  // guessing at generic resize/font timing, targets the real race.
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Phase C state
+  const [activeTool, setActiveTool] = useState<MapTool>("pan");
+  const [graticuleOn, setGraticuleOn] = useState(false);
+  const drawToolRef = useRef<BboxDrawTool | null>(null);
+  // Avoids a stale closure over onBboxChange inside the draw-tool's
+  // subscription, which is only set up once (on mapLoaded), not on every
+  // render — same stale-reference caution as Day 24's spatialBounds fix.
+  const onBboxChangeRef = useRef(onBboxChange);
+  useEffect(() => {
+    onBboxChangeRef.current = onBboxChange;
+  }, [onBboxChange]);
 
   function fitToBounds(bounds: SpatialBounds) {
     if (!mapRef.current) return;
@@ -114,10 +124,6 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
     lastFittedRef.current = bounds;
   }
 
-  // Ongoing safety net for layout shifts after the map has loaded
-  // (sidebar content height changes, window resize) — still useful on
-  // top of the onLoad gate below, since container size can still change
-  // after initial load.
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !mapLoaded) return;
@@ -131,12 +137,6 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
     return () => observer.disconnect();
   }, [spatialBounds, mapLoaded]);
 
-  // Auto-zoom to the ingested file's spatial extent — gated on
-  // mapLoaded so this never fires before MapLibre's GL context/style
-  // are actually ready. requestAnimationFrame (double-wrapped) waits
-  // for the browser to have painted at least one frame post-load,
-  // giving the container's final flex-determined size time to be
-  // reflected before we ask MapLibre to resize/fit against it.
   useEffect(() => {
     if (!spatialBounds || !mapLoaded) return;
     requestAnimationFrame(() => {
@@ -147,19 +147,140 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
     });
   }, [spatialBounds, mapLoaded]);
 
-  // Recolor the fetched grayscale+alpha bitmap against the active
-  // colormap. Memoized on [rasterResult, colormap] specifically — without
-  // this, every bbox keystroke (which re-renders MapView via App's
-  // mapBbox state) would re-run canvas recoloring even though neither
-  // the raster data nor the colormap actually changed.
+  // Phase C: instantiate BboxDrawTool once, only after mapLoaded (same
+  // onLoad-gate discipline as fitBounds/resize above — calling terra-draw's
+  // adapter against a not-yet-ready map is an unnecessary risk to take on).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current) return;
+    const maplibreMap = mapRef.current.getMap();
+    const tool = new BboxDrawTool(maplibreMap);
+    drawToolRef.current = tool;
+
+    const unsubscribe = tool.onBboxChange((b) => {
+      onBboxChangeRef.current(b ? toMapBbox(b) : null);
+    });
+
+    return () => {
+      unsubscribe();
+      tool.destroy();
+      drawToolRef.current = null;
+    };
+  }, [mapLoaded]);
+
+  // Phase C: sync an externally-changed bbox (numeric field edit) down
+  // into the draw tool. Guarded by bboxRoughlyEqual so a change that
+  // originated FROM the map (drawn, then bubbled up through onBboxChange,
+  // then passed back down as the same `bbox` prop) doesn't re-trigger
+  // setRectangle() redundantly.
+  useEffect(() => {
+    const tool = drawToolRef.current;
+    if (!tool || !mapLoaded) return;
+    const next = bbox ? toLatLonBbox(bbox) : null;
+    const current = tool.getRectangle();
+    if (bboxRoughlyEqual(current, next)) return;
+    if (next) {
+      tool.setRectangle(next);
+    } else {
+      tool.clear();
+    }
+  }, [bbox, mapLoaded]);
+
+  // Phase C: exclusive draw/pan tool state machine — toggles MapLibre's
+  // own dragPan alongside the draw tool's mode, per AKV's spec (drawing
+  // and panning must never both be active at once).
+  useEffect(() => {
+    const tool = drawToolRef.current;
+    const maplibreMap = mapRef.current?.getMap();
+    if (!tool || !maplibreMap || !mapLoaded) return;
+
+    if (activeTool === "draw") {
+      // Disabling dragPan alone wasn't enough in practice — a trackpad's
+      // click-and-hold-drag gesture can be picked up by touchZoomRotate
+      // (or other handlers) instead of/in addition to dragPan depending
+      // on how the OS/browser reports the gesture, letting the map move
+      // underneath terra-draw mid-draw and producing a degenerate
+      // near-zero rectangle. Disabling every camera-movement handler
+      // during draw mode closes that gap entirely. Zoom/pan-arrow
+      // toolbar buttons are unaffected — they call map.zoomIn()/panBy()
+      // directly, not through these handlers.
+      maplibreMap.dragPan.disable();
+      maplibreMap.scrollZoom.disable();
+      maplibreMap.boxZoom.disable();
+      maplibreMap.dragRotate.disable();
+      maplibreMap.doubleClickZoom.disable();
+      maplibreMap.touchZoomRotate.disable();
+      maplibreMap.touchPitch.disable();
+      maplibreMap.keyboard.disable();
+      maplibreMap.getCanvas().style.cursor = "crosshair";
+      tool.startDraw();
+    } else {
+      maplibreMap.dragPan.enable();
+      maplibreMap.scrollZoom.enable();
+      maplibreMap.boxZoom.enable();
+      maplibreMap.dragRotate.enable();
+      maplibreMap.doubleClickZoom.enable();
+      maplibreMap.touchZoomRotate.enable();
+      maplibreMap.touchPitch.enable();
+      maplibreMap.keyboard.enable();
+      maplibreMap.getCanvas().style.cursor = "";
+      tool.stopDraw();
+    }
+  }, [activeTool, mapLoaded]);
+
+  // Phase C: graticule add/update/remove, recomputed on pan/zoom
+  // (moveend) while enabled.
+  useEffect(() => {
+    const maplibreMap = mapRef.current?.getMap();
+    if (!maplibreMap || !mapLoaded) return;
+
+    if (!graticuleOn) {
+      removeGraticule(maplibreMap);
+      return;
+    }
+
+    const update = () => {
+      const b = maplibreMap.getBounds();
+      addOrUpdateGraticule(maplibreMap, {
+        north: b.getNorth(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        west: b.getWest(),
+      });
+    };
+    update();
+    maplibreMap.on("moveend", update);
+    return () => {
+      maplibreMap.off("moveend", update);
+      removeGraticule(maplibreMap);
+    };
+  }, [graticuleOn, mapLoaded]);
+
+  function handleZoomIn() {
+    mapRef.current?.getMap().zoomIn({ duration: 200 });
+  }
+
+  function handleZoomOut() {
+    mapRef.current?.getMap().zoomOut({ duration: 200 });
+  }
+
+  function handlePan(direction: PanDirection) {
+    const maplibreMap = mapRef.current?.getMap();
+    if (!maplibreMap) return;
+    const step = 80; // px
+    const offsets: Record<PanDirection, [number, number]> = {
+      up: [0, -step],
+      down: [0, step],
+      left: [-step, 0],
+      right: [step, 0],
+    };
+    maplibreMap.panBy(offsets[direction], { duration: 250 });
+  }
+
   const recoloredCanvas = useMemo(() => {
     if (!rasterResult || rasterResult.type !== "bitmap") return null;
     return recolorBitmap(rasterResult.imageBitmap, colormap);
   }, [rasterResult, colormap]);
 
-  // Same memoization reasoning for swath point colors — recomputing a
-  // per-point color lookup across potentially hundreds of thousands of
-  // points on every keystroke would be wasteful.
   const pointRenderData = useMemo(() => {
     if (!rasterResult || rasterResult.type !== "points") return null;
     const { lon, lat, value, pointCount } = rasterResult;
@@ -180,8 +301,6 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
 
   const layers: Layer[] = [];
 
-  // Raster data layer first, so the bbox rectangle (added below) draws
-  // on top of it rather than being hidden underneath.
   if (recoloredCanvas && rasterResult?.type === "bitmap") {
     layers.push(
       new BitmapLayer({
@@ -212,31 +331,11 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
     );
   }
 
-  if (isValidBbox(bbox)) {
-    const { latMin, latMax, lonMin, lonMax } = bbox;
-    layers.push(
-      new PolygonLayer({
-        id: "query-bbox",
-        data: [
-          {
-            polygon: [
-              [lonMin, latMin],
-              [lonMax, latMin],
-              [lonMax, latMax],
-              [lonMin, latMax],
-              [lonMin, latMin],
-            ],
-          },
-        ],
-        getPolygon: (d: { polygon: number[][] }) => d.polygon,
-        stroked: true,
-        filled: true,
-        getFillColor: [0, 128, 255, 40],
-        getLineColor: [0, 128, 255, 200],
-        lineWidthMinPixels: 2,
-      })
-    );
-  }
+  // NOTE: the bbox rectangle is no longer drawn here via deck.gl
+  // PolygonLayer (Day 22-24 behavior) — terra-draw (BboxDrawTool) now owns
+  // that rendering directly on the MapLibre map, since it's the
+  // interactive/editable one as of Phase C. Rendering both would show two
+  // overlapping rectangles.
 
   return (
     <div className="map-view" ref={containerRef}>
@@ -249,6 +348,17 @@ export default function MapView({ bbox, spatialBounds, rasterResult, colormap, o
       >
         <DeckGLOverlay layers={layers} />
       </Map>
+      <div className="map-view-toolbar-overlay">
+        <MapToolbar
+          activeTool={activeTool}
+          onToolChange={setActiveTool}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onPan={handlePan}
+          graticuleOn={graticuleOn}
+          onToggleGraticule={() => setGraticuleOn((v) => !v)}
+        />
+      </div>
     </div>
   );
 }

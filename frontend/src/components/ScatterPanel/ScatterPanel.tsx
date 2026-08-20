@@ -1,14 +1,27 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchScatter, type ScatterResult } from "../../services/backendApi";
 import "../TimeSeriesPanel/TimeSeriesPanel.css";
+
+type ParsedBbox = { latMin: number; latMax: number; lonMin: number; lonMax: number };
+
+function bboxRoughlyEqual(a: ParsedBbox | null, b: ParsedBbox | null): boolean {
+  if (a === null || b === null) return a === b;
+  const EPS = 1e-6;
+  return (
+    Math.abs(a.latMin - b.latMin) < EPS &&
+    Math.abs(a.latMax - b.latMax) < EPS &&
+    Math.abs(a.lonMin - b.lonMin) < EPS &&
+    Math.abs(a.lonMax - b.lonMax) < EPS
+  );
+}
 
 interface ScatterPanelProps {
   filePath: string;
   availableVariables: string[];
   onResult: (result: ScatterResult | null) => void;
-  onBboxChange?: (
-    bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
-  ) => void;
+  onBboxChange?: (bbox: ParsedBbox | null) => void;
+  // Phase C: this panel's bbox as owned by App.tsx's bboxByMode(.scatter).
+  bbox?: ParsedBbox | null;
 }
 
 export default function ScatterPanel({
@@ -16,6 +29,7 @@ export default function ScatterPanel({
   availableVariables,
   onResult,
   onBboxChange,
+  bbox,
 }: ScatterPanelProps) {
   const [variableX, setVariableX] = useState(availableVariables[0] || "");
   const [variableY, setVariableY] = useState(
@@ -29,6 +43,8 @@ export default function ScatterPanel({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const lastEmittedRef = useRef<ParsedBbox | null>(null);
 
   function emitBboxChange(next: {
     latMin?: string;
@@ -50,8 +66,29 @@ export default function ScatterPanel({
       lonMax: parseFloat(values.lonMax),
     };
     const allValid = Object.values(parsed).every((v) => !Number.isNaN(v));
-    onBboxChange(allValid ? parsed : null);
+    const result = allValid ? parsed : null;
+    lastEmittedRef.current = result;
+    onBboxChange(result);
   }
+
+  // Phase C: sync fields from an externally-changed bbox (map drag).
+  useEffect(() => {
+    const incoming = bbox ?? null;
+    if (bboxRoughlyEqual(incoming, lastEmittedRef.current)) return;
+
+    if (incoming === null) {
+      setLatMin("");
+      setLatMax("");
+      setLonMin("");
+      setLonMax("");
+    } else {
+      setLatMin(String(incoming.latMin));
+      setLatMax(String(incoming.latMax));
+      setLonMin(String(incoming.lonMin));
+      setLonMax(String(incoming.lonMax));
+    }
+    lastEmittedRef.current = incoming;
+  }, [bbox]);
 
   function parseBboxOrError() {
     const lm = parseFloat(latMin);

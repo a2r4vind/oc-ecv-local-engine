@@ -21,24 +21,30 @@ interface WithinFileEntry {
   time: string;
   mean: number | null;
 }
-
 interface WithinFileResult {
-  file_name: string;
-  variable: string;
+  // file_name/variable are optional here to match backendApi.ts's actual
+  // WithinFileTimeSeriesResult shape (the source of truth for what the
+  // FastAPI /timeseries-within-file endpoint can return) — neither field
+  // is actually read below, this type only exists to describe what
+  // normalizeWithinFileResult needs from its input, not to enforce
+  // fields the backend doesn't guarantee.
+  file_name?: string;
+  variable?: string;
   entries: WithinFileEntry[];
   error?: string;
 }
-
 interface BatchTimeseriesEntry {
   file: string;
   mean?: number | null;
   skipped?: boolean;
   error?: string;
 }
-
 interface BatchTimeseriesResult {
-  variable: string;
-  file_count: number;
+  // Same reasoning as WithinFileResult above — matches backendApi.ts's
+  // actual BatchTimeseriesResult shape; variable/file_count aren't read
+  // by normalizeBatchResult below.
+  variable?: string;
+  file_count?: number;
   timeseries: BatchTimeseriesEntry[];
   error?: string;
 }

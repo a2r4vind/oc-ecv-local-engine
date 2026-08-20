@@ -1,0 +1,75 @@
+/* frontend/src/components/MapView/MapToolbar.css */
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  background: var(--oc-panel-bg);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-md);
+}
+
+.map-toolbar-group {
+  display: flex;
+  gap: 4px;
+}
+
+.map-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--oc-radius-sm);
+  background: transparent;
+  color: var(--oc-text-secondary);
+  cursor: pointer;
+}
+
+.map-toolbar-btn:hover {
+  background: var(--oc-page-bg);
+  color: var(--oc-text);
+}
+
+/* Yellow highlight for the exclusive draw/pan tool state, and the
+   graticule toggle when on. Not yet part of the shared --oc-* token
+   set in App.css — defined locally until/unless another component
+   needs the same highlight color. */
+.map-toolbar-btn.active {
+  --oc-tool-active: #facc15;
+  --oc-tool-active-border: #ca8a04;
+  background: var(--oc-tool-active);
+  border-color: var(--oc-tool-active-border);
+  color: var(--oc-navy-900);
+}
+
+.map-toolbar-btn.active:hover {
+  background: var(--oc-tool-active);
+}
+
+.map-toolbar-pan-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  grid-template-rows: repeat(2, 30px);
+  gap: 2px;
+}
+
+.map-toolbar-pan-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+.map-toolbar-pan-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+.map-toolbar-pan-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+.map-toolbar-pan-down {
+  grid-column: 2;
+  grid-row: 2;
+}

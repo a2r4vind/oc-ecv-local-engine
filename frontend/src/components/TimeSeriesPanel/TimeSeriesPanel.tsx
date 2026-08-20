@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import DatePickerField from "../DatePickerField/DatePickerField";
 import {
@@ -13,6 +13,18 @@ import {
 import "./TimeSeriesPanel.css";
 
 type Mode = "within-file" | "batch";
+type ParsedBbox = { latMin: number; latMax: number; lonMin: number; lonMax: number };
+
+function bboxRoughlyEqual(a: ParsedBbox | null, b: ParsedBbox | null): boolean {
+  if (a === null || b === null) return a === b;
+  const EPS = 1e-6;
+  return (
+    Math.abs(a.latMin - b.latMin) < EPS &&
+    Math.abs(a.latMax - b.latMax) < EPS &&
+    Math.abs(a.lonMin - b.lonMin) < EPS &&
+    Math.abs(a.lonMax - b.lonMax) < EPS
+  );
+}
 
 interface TimeSeriesPanelProps {
   filePath: string;
@@ -26,9 +38,12 @@ interface TimeSeriesPanelProps {
   // Option A (isolated per-panel bbox): reports this panel's own bbox
   // upward so the map's overlay rectangle can reflect it while this
   // panel/mode is active — independent of every other panel's bbox.
-  onBboxChange?: (
-    bbox: { latMin: number; latMax: number; lonMin: number; lonMax: number } | null
-  ) => void;
+  onBboxChange?: (bbox: ParsedBbox | null) => void;
+  // Phase C: this panel's bbox as owned by App.tsx's bboxByMode(.timeseries)
+  // — synced into local field state when it changes for a reason other
+  // than this panel's own last edit (i.e. a map-drag while this tab is
+  // active). See ParameterSelector.tsx for the identical pattern.
+  bbox?: ParsedBbox | null;
   // Phase B: this file's own valid date coverage — only meaningful for
   // "within this file" mode, since batch mode's range spans whatever
   // files exist in a chosen directory, not this one file's own steps.
@@ -41,6 +56,7 @@ export default function TimeSeriesPanel({
   supportsWithinFile,
   onResult,
   onBboxChange,
+  bbox,
   validDateRange,
 }: TimeSeriesPanelProps) {
 
@@ -51,6 +67,8 @@ export default function TimeSeriesPanel({
   const [latMax, setLatMax] = useState("");
   const [lonMin, setLonMin] = useState("");
   const [lonMax, setLonMax] = useState("");
+
+  const lastEmittedRef = useRef<ParsedBbox | null>(null);
 
   function emitBboxChange(next: {
     latMin?: string;
@@ -72,8 +90,29 @@ export default function TimeSeriesPanel({
       lonMax: parseFloat(values.lonMax),
     };
     const allValid = Object.values(parsed).every((v) => !Number.isNaN(v));
-    onBboxChange(allValid ? parsed : null);
+    const result = allValid ? parsed : null;
+    lastEmittedRef.current = result;
+    onBboxChange(result);
   }
+
+  // Phase C: sync fields from an externally-changed bbox (map drag).
+  useEffect(() => {
+    const incoming = bbox ?? null;
+    if (bboxRoughlyEqual(incoming, lastEmittedRef.current)) return;
+
+    if (incoming === null) {
+      setLatMin("");
+      setLatMax("");
+      setLonMin("");
+      setLonMax("");
+    } else {
+      setLatMin(String(incoming.latMin));
+      setLatMax(String(incoming.latMax));
+      setLonMin(String(incoming.lonMin));
+      setLonMax(String(incoming.lonMax));
+    }
+    lastEmittedRef.current = incoming;
+  }, [bbox]);
   
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");

@@ -241,6 +241,7 @@ function App() {
                 availableVariables={availableVariables}
                 supportsTemporalFilter={supportsTemporalFilter}
                 onSubmit={handleQuerySubmit}
+                bbox={bboxByMode.stats}
                 onBboxChange={setBboxForMode("stats")}
                 validDateRange={validDateRange}
               />
@@ -252,6 +253,7 @@ function App() {
                 availableVariables={availableVariables}
                 supportsWithinFile={supportsTemporalFilter}
                 onResult={setTsResult}
+                bbox={bboxByMode.timeseries}
                 onBboxChange={setBboxForMode("timeseries")}
                 validDateRange={validDateRange}
               />
@@ -262,6 +264,7 @@ function App() {
                 filePath={ingestedFilePath!}
                 availableVariables={availableVariables}
                 onResult={setHistResult}
+                bbox={bboxByMode.histogram}
                 onBboxChange={setBboxForMode("histogram")}
               />
             </div>
@@ -271,6 +274,7 @@ function App() {
                 filePath={ingestedFilePath!}
                 availableVariables={availableVariables}
                 onResult={setScatterResult}
+                bbox={bboxByMode.scatter}
                 onBboxChange={setBboxForMode("scatter")}
               />
             </div>
@@ -305,6 +309,7 @@ function App() {
 
             <MapView
               bbox={bboxByMode[activeMode]}
+              onBboxChange={setBboxForMode(activeMode)}
               spatialBounds={spatialBounds}
               // Raster overlay is only meaningful for the Query tab's
               // single-snapshot pixel-value visualization — Time
