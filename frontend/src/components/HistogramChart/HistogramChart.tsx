@@ -13,6 +13,11 @@ export default function HistogramChart({ data, variable }: HistogramChartProps) 
   // raw bin edges — numpy.histogram() gives us N+1 edges for N counts.
   const centers = counts.map((_, i) => (edges[i] + edges[i + 1]) / 2);
   const widths = counts.map((_, i) => edges[i + 1] - edges[i]);
+  // Day 30: exact bin range per bar — the bin center alone (Plotly's
+  // default x hover value) doesn't convey the bin's width.
+  const rangeLabels = counts.map(
+    (_, i) => `${edges[i].toFixed(3)}–${edges[i + 1].toFixed(3)}`
+  );
 
   return (
     <div className="chart-wrapper">
@@ -24,6 +29,8 @@ export default function HistogramChart({ data, variable }: HistogramChartProps) 
             type: "bar",
             width: widths,
             marker: { color: "#2563eb" },
+            customdata: rangeLabels,
+            hovertemplate: "Range: %{customdata}<br>Count: %{y}<extra></extra>",
           },
         ]}
         layout={{

@@ -122,3 +122,83 @@ export function recolorBitmap(
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }
+
+
+/**
+ * Day 30: decoded raw (denormalized) pixel values for a flat-grid raster,
+ * kept separate from recolorBitmap()'s display canvas above. Colormap-
+ * independent by design — only needs to be decoded once per raster
+ * result, not once per colormap switch, since it's used for hover-
+ * tooltip value lookup rather than rendering.
+ */
+export interface RawBitmapData {
+  values: Float32Array; // denormalized; NaN for masked/invalid pixels
+  width: number;
+  height: number;
+}
+
+export function decodeRawBitmapValues(
+  source: ImageBitmap,
+  valueMin: number,
+  valueMax: number
+): RawBitmapData {
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Could not acquire 2D canvas context for raw value decoding");
+  }
+
+  ctx.drawImage(source, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const values = new Float32Array(canvas.width * canvas.height);
+
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    const alpha = data[i + 3];
+    if (alpha === 0) {
+      values[p] = NaN; // masked pixel — matches recolorBitmap's skip-on-alpha-0 convention
+      continue;
+    }
+    const luminance = data[i]; // R channel; G/B are identical copies from LA decode
+    values[p] = valueMin + (luminance / 255) * (valueMax - valueMin);
+  }
+
+  return { values, width: canvas.width, height: canvas.height };
+}
+
+/**
+ * Looks up a raw denormalized value at a given [lon, lat] map coordinate
+ * within a decoded bitmap's raw value grid, using the raster's own
+ * geographic bounds (the same bounds passed to deck.gl's BitmapLayer).
+ * Returns null if the coordinate falls outside the raster's bounds, or
+ * lands on a masked/invalid pixel.
+ *
+ * Row 0 is assumed to be the image's top edge (north), consistent with
+ * raster.py's north-up row-orientation handling (Day 23) — this is
+ * inferred from the Day 23 report's description, not read directly from
+ * raster.py's current source, so verify it live against a real file
+ * before trusting it fully.
+ */
+export function lookupBitmapValue(
+  coordinate: [number, number],
+  bounds: [number, number, number, number], // west, south, east, north
+  raw: RawBitmapData
+): number | null {
+  const [lon, lat] = coordinate;
+  const [west, south, east, north] = bounds;
+  if (lon < west || lon > east || lat < south || lat > north) return null;
+
+  const col = Math.min(
+    raw.width - 1,
+    Math.max(0, Math.floor(((lon - west) / (east - west)) * raw.width))
+  );
+  const row = Math.min(
+    raw.height - 1,
+    Math.max(0, Math.floor(((north - lat) / (north - south)) * raw.height))
+  );
+
+  const value = raw.values[row * raw.width + col];
+  return Number.isNaN(value) ? null : value;
+}

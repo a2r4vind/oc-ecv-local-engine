@@ -24,6 +24,7 @@ export default function TimeSeriesChart({ data, variable, title }: TimeSeriesCha
             name: variable,
             line: { color: "#2563eb" },
             marker: { size: 6 },
+            hovertemplate: `<b>%{x}</b><br>${variable}: %{y:.4f}<extra></extra>`,
           },
           {
             x: times,
@@ -33,6 +34,7 @@ export default function TimeSeriesChart({ data, variable, title }: TimeSeriesCha
             marker: { color: "#f59e0b" },
             yaxis: "y2",
             opacity: 0.5,
+            hovertemplate: `<b>%{x}</b><br>Anomaly: %{y:.4f}<extra></extra>`,
           },
         ]}
         layout={{
@@ -52,6 +54,9 @@ export default function TimeSeriesChart({ data, variable, title }: TimeSeriesCha
             side: "right",
           },
           legend: { orientation: "h", y: -0.35 },
+          // Day 30: groups both traces' tooltips into one shared box per
+          // x-position, rather than two separately-floating boxes.
+          hovermode: "x unified",
         }}
         
         style={{ width: "100%" }}

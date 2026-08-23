@@ -22,3 +22,20 @@
   left: 12px;
   z-index: 5;
 }
+
+/* Day 30: deck.gl auto-generates this element when getTooltip returns
+   non-null — unstyled by default (transparent background, browser
+   default font). Styled here to match the app's existing design
+   tokens rather than left as deck.gl's bare default look. */
+.map-view .deck-tooltip {
+  background: var(--oc-panel-bg);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-sm);
+  padding: 6px 10px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--oc-text);
+  box-shadow: 0 1px 4px rgba(16, 38, 59, 0.15);
+  pointer-events: none;
+  z-index: 10;
+}

@@ -24,6 +24,7 @@ export default function ScatterChart({ data }: ScatterChartProps) {
             type: "scattergl",
             mode: "markers",
             marker: { size: 4, color: "#2563eb", opacity: 0.4 },
+            hovertemplate: `${data.variable_x}: %{x:.4f}<br>${data.variable_y}: %{y:.4f}<extra></extra>`,
           },
         ]}
         layout={{

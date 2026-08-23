@@ -28,6 +28,35 @@ export class BboxDrawTool {
   private listeners: Set<BboxChangeListener> = new Set();
   private currentMode: "rectangle" | "pan" = "pan";
   private isProgrammaticUpdate = false;
+  // Day 30 bugfix: tracks the bbox currently represented on the map,
+  // updated both when set externally (setRectangle) and when emitted
+  // upward (emit). Lets emit() detect and skip a "no-op" round trip —
+  // critical for TerraDrawSelectMode's click-to-select, which fires a
+  // "change" event (previously reaching emit()) even though clicking
+  // an already-drawn rectangle only toggles its internal `selected`
+  // flag, not its geometry. Without this guard, every such click still
+  // pushed a "new" bbox through React state -> MapView's bbox-sync
+  // effect -> setRectangle(), which could re-enter terra-draw while its
+  // own select-mode click handler was still unwinding.
+
+  
+  private currentBboxState: LatLonBbox | null = null;
+  // Day 30 bugfix (actual root cause): the rectangle feature's own
+  // store ID, tracked explicitly. TerraDrawSelectMode creates helper
+  // features (e.g. selection-point handles, via
+  // selection-point.behavior.ts) as a side effect of clicking to select
+  // an existing rectangle — these fire terra-draw's "change" event too,
+  // with the NEW helper feature's id in `ids`, not the rectangle's.
+  // The previous "change" handler assumed the last id in that array
+  // always belonged to the rectangle, which is false for these helper
+  // features — emitFromFeatureId() then correctly found a non-Polygon
+  // geometry and emitted null, which (incorrectly) looked like a real
+  // "bbox cleared" change and re-entered terra-draw via setRectangle()
+  // while its own selection-point creation was still mid-execution.
+  // Filtering "change" events by this tracked ID stops that at the
+  // source: only genuine changes to the rectangle itself are ever
+  // emitted.
+  private rectangleFeatureId: TDFeatureId | null = null;
 
   constructor(map: MaplibreMap) {
     this.map = map;
@@ -79,6 +108,7 @@ export class BboxDrawTool {
           this.draw.removeFeatures(staleIds);
         });
       }
+      this.rectangleFeatureId = id;
       this.emitFromFeatureId(id);
       this.forceRepaint();
     });
@@ -86,6 +116,16 @@ export class BboxDrawTool {
     this.draw.on("change", (ids, type) => {
       this.forceRepaint();
       if (this.isProgrammaticUpdate) return;
+      
+      // Only react to changes that actually involve the tracked
+      // rectangle feature — ignores TerraDrawSelectMode's own helper
+      // features (selection points, midpoints, etc.), which fire this
+      // same event with unrelated ids whenever a rectangle is
+      // clicked/selected, not just when its geometry actually changes.
+      if (this.rectangleFeatureId === null || !ids.includes(this.rectangleFeatureId)) {
+        return;
+      }
+      
       if (type === "delete") {
         this.emit(null);
         return;
@@ -113,6 +153,9 @@ export class BboxDrawTool {
   }
 
   clear(): void {
+  
+    this.deselectCurrent();
+    
     this.runProgrammatic(() => {
       const snapshot = this.draw.getSnapshot();
       const ids = snapshot
@@ -122,6 +165,32 @@ export class BboxDrawTool {
         this.draw.removeFeatures(ids);
       }
     });
+    this.currentBboxState = null;
+    this.rectangleFeatureId = null;
+  }
+  
+  // Day 30 bugfix: deselects the currently-tracked rectangle feature
+  // via terra-draw's own public API (deselectFeature(id) — confirmed
+  // to require an explicit FeatureId, not zero-argument) before
+  // removeFeatures() touches the raw store directly. Without this,
+  // removing a feature that TerraDrawSelectMode still considers
+  // "selected" leaves the mode's own internal selected-feature
+  // reference stale — later mode-internal cleanup then tries to act
+  // on/delete a feature that's already gone, producing "No feature
+  // with id..., can not delete", this time triggered by a bbox field
+  // edit rather than a map click. Wrapped defensively: terra-draw
+  // throws if the given id isn't currently selected (e.g. rectangle
+  // exists but was never clicked/selected), which is an expected,
+  // harmless case here, not a real failure.
+  private deselectCurrent(): void {
+    if (this.rectangleFeatureId === null) return;
+    try {
+      this.draw.deselectFeature(this.rectangleFeatureId);
+    } catch {
+      // Feature wasn't currently selected, or was already removed —
+      // either way, the goal (no stale selection reference) is already
+      // satisfied.
+    }
   }
 
   /**
@@ -137,6 +206,8 @@ export class BboxDrawTool {
   setRectangle(bbox: LatLonBbox): void {
     const current = this.getRectangle();
     if (current && this.bboxEqual(current, bbox)) return;
+    
+    this.deselectCurrent();
 
     this.runProgrammatic(() => {
       const snapshot = this.draw.getSnapshot();
@@ -167,8 +238,11 @@ export class BboxDrawTool {
         },
       } as GeoJSONStoreFeatures;
 
-      this.draw.addFeatures([feature]);
+      const added = this.draw.addFeatures([feature]);
+      const addedId = added?.[0]?.id;
+      this.rectangleFeatureId = addedId !== undefined ? addedId : null;
     });
+    this.currentBboxState = bbox;
   }
 
   getRectangle(): LatLonBbox | null {
@@ -259,6 +333,14 @@ export class BboxDrawTool {
       Math.abs(a.maxLon - b.maxLon) < EPS
     );
   }
+  
+  // Null-safe wrapper around bboxEqual, used by emit()'s dedup check —
+  // both sides null (nothing drawn) counts as "equal" (no change);
+  // exactly one null is always a real change.
+  private bboxesEqual(a: LatLonBbox | null, b: LatLonBbox | null): boolean {
+    if (a === null || b === null) return a === b;
+    return this.bboxEqual(a, b);
+  }
 
   private boundsFromRing(ring: number[][]): LatLonBbox {
     const lons = ring.map((c) => c[0]);
@@ -270,8 +352,29 @@ export class BboxDrawTool {
       maxLon: Math.max(...lons),
     };
   }
+  
+    private emit(bbox: LatLonBbox | null): void {
+    // Day 30 bugfix (root cause): skip entirely if this bbox doesn't
+    // actually differ from what's already represented on the map.
+    // TerraDrawSelectMode's click-to-select toggles a feature's
+    // internal `selected` property via store.updateProperty() — same
+    // geometry every time — which previously still reached this point
+    // and triggered a "no-op" React round trip (state update -> bbox
+    // prop -> MapView's sync effect -> setRectangle()) that could race
+    // with terra-draw's own still-unwinding click handler and delete a
+    // feature it still held a reference to. Comparing against
+    // currentBboxState stops the chain at its source: a click-select
+    // with unchanged geometry never emits, never touches React state,
+    // and never calls back into terra-draw at all.
+    if (this.bboxesEqual(this.currentBboxState, bbox)) return;
+    this.currentBboxState = bbox;
 
-  private emit(bbox: LatLonBbox | null): void {
-    this.listeners.forEach((fn) => fn(bbox));
+    // Deferred via queueMicrotask as defense in depth for any genuine
+    // bbox change originating from inside terra-draw's own synchronous
+    // call stack, ensuring React's resulting state update runs only
+    // after that call stack has fully unwound.
+    queueMicrotask(() => {
+      this.listeners.forEach((fn) => fn(bbox));
+    });
   }
 }

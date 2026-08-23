@@ -324,6 +324,7 @@ function App() {
               rasterResult={activeMode === "stats" ? rasterResult : null}
               colormap={colormap}
               opacity={opacity}
+              variable={queriedVariable ?? ""}
             />
             {activeMode === "stats" && rasterResult && (
               <ColorLegend

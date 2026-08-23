@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map, useControl, type MapRef } from "react-map-gl/maplibre";
 import { setWorkerUrl } from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { BitmapLayer, ScatterplotLayer } from "@deck.gl/layers";
-import type { Layer } from "@deck.gl/core";
+import type { Layer, PickingInfo } from "@deck.gl/core";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { recolorBitmap, getColor, type ColormapName } from "../../utils/colormaps";
+import { recolorBitmap, getColor, decodeRawBitmapValues, lookupBitmapValue, type ColormapName, } from "../../utils/colormaps";
 import type { RasterResult } from "../../services/backendApi";
 import { BboxDrawTool, type LatLonBbox } from "./BboxDrawTool";
 import { MapToolbar, type MapTool, type PanDirection } from "./MapToolbar";
@@ -51,16 +51,18 @@ interface MapViewProps {
   rasterResult: RasterResult | null;
   colormap: ColormapName;
   opacity: number;
+  // Day 30: current query's variable name, shown in map hover tooltips.
+  variable: string;
 }
 
 // Bridges deck.gl into the MapLibre map instance. Overlaid mode
 // (interleaved: false) — see Day 22 for why interleaved mode was rejected
 // (maplibre-gl v6 / deck.gl v9.3.7 version-skew).
-function DeckGLOverlay({ layers }: { layers: Layer[] }) {
+function DeckGLOverlay({ layers, getTooltip, }: { layers: Layer[]; getTooltip: (info: PickingInfo) => {html: string} | null;}) {
   const overlay = useControl<MapboxOverlay>(
-    () => new MapboxOverlay({ interleaved: false, layers })
+    () => new MapboxOverlay({ interleaved: false, layers, getTooltip })
   );
-  overlay.setProps({ layers });
+  overlay.setProps({ layers, getTooltip });
   return null;
 }
 
@@ -90,6 +92,7 @@ export default function MapView({
   rasterResult,
   colormap,
   opacity,
+  variable,
 }: MapViewProps) {
   const mapRef = useRef<MapRef | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -280,13 +283,26 @@ export default function MapView({
     if (!rasterResult || rasterResult.type !== "bitmap") return null;
     return recolorBitmap(rasterResult.imageBitmap, colormap);
   }, [rasterResult, colormap]);
+  
+  // Day 30: decoded raw (denormalized) values, separate from the
+  // recolored display canvas above. Colormap-independent — only
+  // recomputed when the underlying raster data itself changes, so
+  // switching colormaps doesn't trigger a redundant decode.
+  const rawBitmapData = useMemo(() => {
+    if (!rasterResult || rasterResult.type !== "bitmap") return null;
+    return decodeRawBitmapValues(rasterResult.imageBitmap, rasterResult.valueMin, rasterResult.valueMax);
+  }, [rasterResult]);
 
   const pointRenderData = useMemo(() => {
     if (!rasterResult || rasterResult.type !== "points") return null;
-    const { lon, lat, value, pointCount } = rasterResult;
+    const { lon, lat, value, valueMin, valueMax, pointCount } = rasterResult;
 
     const positions = new Float32Array(pointCount * 2);
     const colors = new Uint8Array(pointCount * 4);
+    // Day 30: denormalized raw values, kept alongside positions/colors so
+    // getTooltip can look up an exact value by picked index without a
+    // second pass over rasterResult.
+    const rawValues = new Float32Array(pointCount);
     for (let i = 0; i < pointCount; i++) {
       positions[i * 2] = lon[i];
       positions[i * 2 + 1] = lat[i];
@@ -295,9 +311,59 @@ export default function MapView({
       colors[i * 4 + 1] = g;
       colors[i * 4 + 2] = b;
       colors[i * 4 + 3] = 220;
+      rawValues[i] = valueMin + value[i] * (valueMax - valueMin);
     }
-    return { positions, colors, pointCount };
+    return { positions, colors, rawValues, pointCount };
   }, [rasterResult, colormap]);
+  
+  // Day 30: deck.gl hover tooltip, handling the two structurally
+  // different layer types separately.
+  //  - "raster-points" (swath, ScatterplotLayer): built from binary
+  //    attribute buffers, not a JS object array, so picking returns
+  //    info.index (not info.object) — looked up directly against
+  //    pointRenderData's parallel arrays.
+  //  - "raster-bitmap" (flat-grid, BitmapLayer): picking gives a
+  //    geographic info.coordinate, not a data value (the GPU only has
+  //    the recolored image) — resolved via lookupBitmapValue() against
+  //    the raw decoded value grid + the raster's own geographic bounds.
+  const getTooltip = useCallback(
+    (info: PickingInfo): { html: string } | null => {
+      if (!info.layer) return null;
+
+      if (
+        info.layer.id === "raster-points" &&
+        info.index !== undefined &&
+        info.index >= 0 &&
+        pointRenderData
+      ) {
+        const i = info.index;
+        const lon = pointRenderData.positions[i * 2];
+        const lat = pointRenderData.positions[i * 2 + 1];
+        const raw = pointRenderData.rawValues[i];
+        return {
+          html: `<b>${variable}</b><br/>${raw.toFixed(4)}<br/><span style="opacity:0.7">${lat.toFixed(4)}°, ${lon.toFixed(4)}°</span>`,
+        };
+      }
+
+      if (
+        info.layer.id === "raster-bitmap" &&
+        info.coordinate &&
+        rawBitmapData &&
+        rasterResult?.type === "bitmap"
+      ) {
+        const value = lookupBitmapValue(
+          info.coordinate as [number, number],
+          rasterResult.bounds,
+          rawBitmapData
+        );
+        if (value === null) return null;
+        return { html: `<b>${variable}</b><br/>${value.toFixed(4)}` };
+      }
+
+      return null;
+    },
+    [pointRenderData, rawBitmapData, rasterResult, variable]
+  );
 
   const layers: Layer[] = [];
 
@@ -308,6 +374,7 @@ export default function MapView({
         image: recoloredCanvas,
         bounds: rasterResult.bounds,
         opacity,
+        pickable: true, // Day 30: required for getTooltip hover picking
       })
     );
   }
@@ -327,6 +394,7 @@ export default function MapView({
         radiusMaxPixels: 4,
         stroked: false,
         opacity,
+        pickable: true, // Day 30: required for getTooltip hover picking
       })
     );
   }
@@ -346,7 +414,7 @@ export default function MapView({
         mapStyle={BASE_STYLE}
         onLoad={() => setMapLoaded(true)}
       >
-        <DeckGLOverlay layers={layers} />
+        <DeckGLOverlay layers={layers} getTooltip={getTooltip} />
       </Map>
       <div className="map-view-toolbar-overlay">
         <MapToolbar
