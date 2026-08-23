@@ -22,11 +22,13 @@ established in ingestion (Day 3-4):
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Tuple
 from datetime import datetime
 
 import numpy as np
 import xarray as xr
+import pandas as pd
+import netCDF4 as nc
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -116,15 +118,129 @@ def granule_within_range(file_path: str, start_date: str, end_date: str) -> dict
         "overlaps": overlaps,
     }
 
+def _get_file_time_range(file_path: Path) -> Optional[Tuple[datetime, datetime, str]]:
+    """
+    Determine a single file's time coverage regardless of structure.
+    Returns (start, end, source) or None if no usable time info exists.
+    source: "time_coordinate" (flat-grid) or "global_attrs" (swath/granule).
+    """
+    try:
+        with xr.open_dataset(file_path) as ds:
+            if "time" in ds.coords or "time" in ds.dims:
+                times = ds["time"].values
+                if len(times) > 0:
+                    start = pd.Timestamp(times.min()).to_pydatetime()
+                    end = pd.Timestamp(times.max()).to_pydatetime()
+                    return (start, end, "time_coordinate")
+    except Exception:
+        pass  # fall through to global-attribute path
+
+    try:
+        with nc.Dataset(file_path) as ds:
+            start_attr = getattr(ds, "time_coverage_start", None)
+            end_attr = getattr(ds, "time_coverage_end", None)
+            if start_attr and end_attr:
+                return (_parse_date(start_attr), _parse_date(end_attr), "global_attrs")
+    except Exception:
+        pass
+
+    return None
+
+
+def scan_directory_date_coverage(
+    directory: str,
+    extensions: Tuple[str, ...] = (".nc",),
+) -> dict:
+    """
+    Scan every file in a directory and report aggregate valid date-range
+    coverage — the "give me everything" counterpart to
+    filter_files_by_date_range(), which requires explicit bounds.
+    """
+    directory_path = Path(directory)
+    if not directory_path.is_dir():
+        raise TemporalFilterError(f"Directory not found: {directory}")
+
+    files = sorted(
+        f for f in directory_path.iterdir()
+        if f.is_file() and f.suffix.lower() in extensions
+    )
+
+    per_file = []
+    usable_starts, usable_ends = [], []
+
+    for f in files:
+        result = _get_file_time_range(f)
+        if result is None:
+            per_file.append({
+                "file_name": f.name,
+                "has_time_info": False,
+                "skip_reason": "NO_TIME_INFO",
+            })
+            continue
+
+        start, end, source = result
+        usable_starts.append(start)
+        usable_ends.append(end)
+        per_file.append({
+            "file_name": f.name,
+            "has_time_info": True,
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "source": source,
+        })
+
+    return {
+        "directory": str(directory_path),
+        "total_files": len(files),
+        "files_with_time_info": len(usable_starts),
+        "files_without_time_info": len(files) - len(usable_starts),
+        "overall_start": min(usable_starts).isoformat() if usable_starts else None,
+        "overall_end": max(usable_ends).isoformat() if usable_ends else None,
+        "per_file": per_file,
+    }
 
 def filter_files_by_date_range(
-    directory: str, start_date: str, end_date: str
+    directory: str, 
+    start_date: Optional[str] = None, 
+    end_date: Optional[str] = None,
+    extensions: Tuple[str, ...] = (".nc")
 ) -> dict[str, Any]:
     """
     Scans every .nc file in a directory and reports which ones fall
     within a requested date range — the core operation Day 17's batch
     time-series extraction will build on directly.
+    
+    If start_date and end_date are both omitted, delegates to
+    scan_directory_date_coverage() and returns every file with usable
+    time info as "matched" — the Phase D "give me everything" path.
     """
+    
+    if start_date is None and end_date is None:
+        coverage = scan_directory_date_coverage(directory)
+        matched = [
+            {"file_name": pf["file_name"], "start": pf["start"],
+             "end": pf["end"], "source": pf["source"]}
+            for pf in coverage["per_file"] if pf["has_time_info"]
+        ]
+        skipped = [
+            {"file_name": pf["file_name"], "reason": pf["skip_reason"]}
+            for pf in coverage["per_file"] if not pf["has_time_info"]
+        ]
+        return {
+            "requested_start": None,
+            "requested_end": None,
+            "total_files_scanned": coverage["total_files"],
+            "matched_count": len(matched),
+            "matched_files": matched,
+            "skipped_count": len(skipped),
+            "skipped_files": skipped,
+        }
+
+    if (start_date is None) != (end_date is None):
+        raise TemporalFilterError(
+            "start_date and end_date must both be provided, or both omitted for full coverage"
+        )
+    
     dir_path = Path(directory)
     files = sorted(dir_path.glob("*.nc"))
 

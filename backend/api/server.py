@@ -15,7 +15,7 @@ from typing import Optional
 # from (matters both for `python api/server.py` and the PyInstaller-frozen binary).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 import uvicorn
@@ -27,6 +27,7 @@ from processing.statistics import compute_regional_stats_multivar, compute_regio
 from processing.statistics import compute_batch_timeseries, compute_timeseries_within_file
 from processing.statistics import compute_histogram, compute_scatter_correlation
 from processing.raster import compute_regional_raster, RasterError
+from processing.temporal_filter import scan_directory_date_coverage, TemporalFilterError
 
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
@@ -318,6 +319,14 @@ def batch_timeseries(
         return json.loads(json.dumps(result, default=str))
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+    
+@app.get("/batch-date-coverage")
+def batch_date_coverage(directory: str):
+    try:
+        result = scan_directory_date_coverage(directory)
+        return json.loads(json.dumps(result, default=str))
+    except TemporalFilterError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
 if __name__ == "__main__":
     # Fixed port for now; may need dynamic port allocation later if port
