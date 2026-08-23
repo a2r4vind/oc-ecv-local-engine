@@ -386,3 +386,28 @@ export async function fetchScatter(query: ScatterQuery): Promise<ScatterResult> 
   }
   return res.json();
 }
+
+export interface DateCoverageFileEntry {
+  file_name: string;
+  has_time_info: boolean;
+  start?: string;
+  end?: string;
+  source?: string;
+  skip_reason?: string;
+}
+
+export interface DateCoverageResult {
+  directory: string;
+  total_files: number;
+  files_with_time_info: number;
+  files_without_time_info: number;
+  overall_start: string | null;
+  overall_end: string | null;
+  per_file: DateCoverageFileEntry[];
+}
+
+export async function scanDateCoverage(directory: string): Promise<DateCoverageResult> {
+  const res = await fetch(`${BASE_URL}/batch-date-coverage?directory=${encodeURIComponent(directory)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
