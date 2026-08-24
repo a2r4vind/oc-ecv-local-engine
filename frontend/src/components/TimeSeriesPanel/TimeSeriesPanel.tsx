@@ -4,6 +4,8 @@ import DatePickerField from "../DatePickerField/DatePickerField";
 import {
   fetchTimeseriesWithinFile,
   fetchBatchTimeseries,
+  scanDateCoverage,
+  type DateCoverageResult,
 } from "../../services/backendApi";
 import {
   normalizeWithinFileResult,
@@ -118,15 +120,61 @@ export default function TimeSeriesPanel({
   const [endDate, setEndDate] = useState("");
 
   const [directory, setDirectory] = useState("");
+  
+  const [useFullCoverage, setUseFullCoverage] = useState(false);
+  const [coverageInfo, setCoverageInfo] = useState<DateCoverageResult | null>(null);
+  const [coverageLoading, setCoverageLoading] = useState(false);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Phase D: runs the directory-wide time-coverage scan (/batch-date-coverage)
+  // and, on success, auto-fills startDate/endDate from the scanned range.
+  // Falls back to manual entry (toggle off) if the scan fails or the
+  // directory has no files with usable time information.
+  async function runCoverageScan(dir: string) {
+    setCoverageError(null);
+    setCoverageLoading(true);
+    try {
+      const result = await scanDateCoverage(dir);
+      setCoverageInfo(result);
+      if (result.overall_start && result.overall_end) {
+        setStartDate(result.overall_start);
+        setEndDate(result.overall_end);
+      } else {
+        setCoverageError("No files with usable time information found in this directory.");
+        setUseFullCoverage(false);
+      }
+    } catch (err) {
+      setCoverageError(
+        err instanceof Error ? `Could not scan directory: ${err.message}` : "Unknown error"
+      );
+      setUseFullCoverage(false);
+    } finally {
+      setCoverageLoading(false);
+    }
+  }
+
+  function handleToggleFullCoverage(checked: boolean) {
+    setUseFullCoverage(checked);
+    setCoverageError(null);
+    if (checked && directory) {
+      runCoverageScan(directory);
+    } else if (!checked) {
+      setCoverageInfo(null);
+    }
+  }
 
   async function pickDirectory() {
     try {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string") {
         setDirectory(selected);
+        setCoverageInfo(null);
+        if (useFullCoverage) {
+          await runCoverageScan(selected);
+        }
       }
     } catch (err) {
       setError(
@@ -335,6 +383,25 @@ export default function TimeSeriesPanel({
               Browse…
             </button>
           </div>
+          <label className="coverage-toggle">
+            <input
+              type="checkbox"
+              checked={useFullCoverage}
+              disabled={coverageLoading}
+              onChange={(e) => handleToggleFullCoverage(e.target.checked)}
+            />
+            Use full directory coverage (skip manual date range)
+          </label>
+          {coverageLoading && (
+            <p className="timeseries-note">Scanning directory for date coverage…</p>
+          )}
+          {useFullCoverage && coverageInfo && coverageInfo.overall_start && (
+            <p className="valid-range-note">
+              Coverage: {coverageInfo.overall_start} to {coverageInfo.overall_end} (
+              {coverageInfo.files_with_time_info}/{coverageInfo.total_files} files with usable time info)
+            </p>
+          )}
+          {coverageError && <div className="validation-error">⚠ {coverageError}</div>}
         </div>
       )}
 
@@ -345,10 +412,17 @@ export default function TimeSeriesPanel({
             Valid range: {validDateRange.min} to {validDateRange.max}
           </p>
         )}
-        <div className="date-grid">
-          <DatePickerField label="Start date" value={startDate} onChange={setStartDate} />
-          <DatePickerField label="End date" value={endDate} onChange={setEndDate} />
-        </div>
+        {mode === "batch" && useFullCoverage ? (
+          <p className="valid-range-note">
+            Using full directory coverage — dates auto-filled from the scan above.
+            Uncheck "Use full directory coverage" to enter a custom range.
+          </p>
+        ) : (
+          <div className="date-grid">
+            <DatePickerField label="Start date" value={startDate} onChange={setStartDate} />
+            <DatePickerField label="End date" value={endDate} onChange={setEndDate} />
+          </div>
+        )}
       </fieldset>
 
       <button type="button" onClick={handlePlot} disabled={loading}>

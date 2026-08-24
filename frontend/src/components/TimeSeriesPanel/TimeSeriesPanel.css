@@ -97,6 +97,15 @@
   flex: 1;
 }
 
+.coverage-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-top: 0.6rem;
+}
+
 .validation-error {
   margin-top: 0.75rem;
   padding: 0.6rem 0.9rem;
@@ -106,3 +115,4 @@
   border: 1px solid var(--oc-error-border);
   font-size: 0.9rem;
 }
+
