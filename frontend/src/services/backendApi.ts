@@ -387,6 +387,50 @@ export async function fetchScatter(query: ScatterQuery): Promise<ScatterResult> 
   return res.json();
 }
 
+
+// Day 37: raw numeric data export (.csv / .bin) — same StatsQuery shape
+// /stats and /raster already use, plus a `format` discriminator. Unlike
+// those endpoints, the response is a raw payload (text or binary), not
+// JSON, so this returns a Blob for the caller to hand to saveFile.ts,
+// rather than parsing a response body shape here.
+export type RawExportFormat = "csv" | "bin";
+
+export async function fetchRawExport(
+  query: StatsQuery,
+  format: RawExportFormat
+): Promise<Blob> {
+  const params = new URLSearchParams({
+    path: query.filePath,
+    variable: query.variable,
+    lat_min: String(query.latMin),
+    lat_max: String(query.latMax),
+    lon_min: String(query.lonMin),
+    lon_max: String(query.lonMax),
+    format,
+  });
+  if (query.startDate) params.set("start_date", query.startDate);
+  if (query.endDate) params.set("end_date", query.endDate);
+  if (query.qualityFlags && query.qualityFlags.length > 0) {
+    params.set("quality_flags", query.qualityFlags.join(","));
+  }
+
+  const res = await fetch(`${BASE_URL}/export-raw?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Backend returned status ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) message = errJson.error;
+    } catch {
+      // error responses are JSON (see server.py's JSONResponse on
+      // RawExportError), but guard anyway for consistency with the
+      // other fetch* functions above.
+    }
+    throw new Error(message);
+  }
+  return res.blob();
+}
+
+
 export interface DateCoverageFileEntry {
   file_name: string;
   has_time_info: boolean;

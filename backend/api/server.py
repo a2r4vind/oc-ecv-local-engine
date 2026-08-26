@@ -27,6 +27,7 @@ from processing.statistics import compute_regional_stats_multivar, compute_regio
 from processing.statistics import compute_batch_timeseries, compute_timeseries_within_file
 from processing.statistics import compute_histogram, compute_scatter_correlation
 from processing.raster import compute_regional_raster, RasterError
+from processing.raw_export import compute_raw_export, RawExportError
 from processing.temporal_filter import scan_directory_date_coverage, TemporalFilterError
 
 
@@ -192,6 +193,41 @@ def get_raster(
 
     headers["X-Point-Count"] = str(meta["point_count"])
     return Response(content=payload, media_type="application/octet-stream", headers=headers)
+
+
+@app.get("/export-raw")
+def export_raw(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    format: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+):
+    """
+    Day 37: raw numeric data export (.csv / .bin) at full physical-unit
+    precision — the counterpart to /raster's rendering-oriented payloads.
+    Same subsetting/masking pipeline as /stats and /raster; `format`
+    (csv|bin) is the only new query parameter versus those endpoints.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        payload, media_type = compute_raw_export(
+            path, variable, lat_min, lat_max, lon_min, lon_max, format,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+    except (StatisticsError, QualityMaskError, IngestionError, RawExportError) as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    ext = "csv" if format == "csv" else "bin"
+    headers = {"Content-Disposition": f'attachment; filename="oc-ecv-export.{ext}"'}
+    return Response(content=payload, media_type=media_type, headers=headers)
+
+
 
 @app.get("/timeseries-within-file")
 def timeseries_within_file(

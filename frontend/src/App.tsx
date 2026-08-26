@@ -15,7 +15,10 @@ import {
   type RasterResult,
   type HistogramResult,
   type ScatterResult,
+  type StatsQuery,
 } from "./services/backendApi";
+import RawExportButton from "./components/RawExportButton/RawExportButton";
+import { exportRawData } from "./utils/dataExport";
 import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
 import ColorLegend from "./components/ColorLegend/ColorLegend";
 import OpacitySlider from "./components/OpacitySlider/OpacitySlider";
@@ -56,6 +59,11 @@ function App() {
   const [colormap, setColormap] = useState<ColormapName>("viridis");
   const [opacity, setOpacity] = useState(1);
   const [queriedVariable, setQueriedVariable] = useState<string | null>(null);
+  // Day 37: exact query object last submitted via "Run Query" — raw
+  // export reuses this rather than reading the form's current field
+  // values, so it always matches what's actually on the map/in
+  // statsResult, not whatever the user has since typed but not run yet.
+  const [lastQuery, setLastQuery] = useState<StatsQuery | null>(null);
 
   const [tsResult, setTsResult] = useState<{ data: NormalizedTimeSeries; variable: string; title: string } | null
   >(null);
@@ -75,6 +83,7 @@ function App() {
     setTsResult(null);
     setHistResult(null);
     setScatterResult(null);
+    setLastQuery(null);
     setActiveMode("stats");
   }
 
@@ -91,6 +100,7 @@ function App() {
     setTsResult(null);
     setHistResult(null);
     setScatterResult(null);
+    setLastQuery(null);
     setActiveMode("stats");
   }
 
@@ -119,6 +129,11 @@ function App() {
       startDate: params.startDate,
       endDate: params.endDate,
     };
+    // Day 37: snapshot the exact query raw export should target — kept
+    // separate from statsResult/rasterResult so a subsequent request
+    // failure on either of those doesn't retroactively invalidate what
+    // was a perfectly valid query for export purposes.
+    setLastQuery(query);
 
     const statsTask = (async () => {
       try {
@@ -304,6 +319,14 @@ function App() {
                 <span className="opacity-readout">{Math.round(opacity * 100)}%</span>
                 {rasterLoading && <span className="inline-status">Loading raster…</span>}
                 {rasterError && <span className="inline-error">⚠ {rasterError}</span>}
+                
+                {lastQuery && (
+                  <RawExportButton
+                    onExport={async (format) => {
+                      await exportRawData(lastQuery, format);
+                      }} 
+                  />
+                )}
               </div>
             )}
 
