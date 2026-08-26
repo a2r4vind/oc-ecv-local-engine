@@ -23,6 +23,21 @@
   z-index: 5;
 }
 
+/* Day 36: mirrors the toolbar overlay's positioning convention
+   (absolute, same z-index, same 12px inset) but anchored to the
+   opposite corner so the two never collide. */
+.map-view-export-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  background: var(--oc-panel-bg);
+  border: 1px solid var(--oc-border);
+  border-radius: var(--oc-radius-sm);
+  padding: 4px 6px;
+  box-shadow: 0 1px 4px rgba(16, 38, 59, 0.15);
+}
+
 /* Day 30: deck.gl auto-generates this element when getTooltip returns
    non-null — unstyled by default (transparent background, browser
    default font). Styled here to match the app's existing design

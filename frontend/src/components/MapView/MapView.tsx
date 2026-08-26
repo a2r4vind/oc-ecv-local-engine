@@ -11,6 +11,9 @@ import type { RasterResult } from "../../services/backendApi";
 import { BboxDrawTool, type LatLonBbox } from "./BboxDrawTool";
 import { MapToolbar, type MapTool, type PanDirection } from "./MapToolbar";
 import { addOrUpdateGraticule, removeGraticule } from "./Graticule";
+import ExportButton from "../ExportButton/ExportButton";
+import { exportMapToBlob, type ExportFormat } from "../../utils/mapExport";
+import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
 import "./MapView.css";
 
 // MapLibre GL v6 ships ESM-only and requires the worker URL to be wired
@@ -265,6 +268,24 @@ export default function MapView({
   function handleZoomOut() {
     mapRef.current?.getMap().zoomOut({ duration: 200 });
   }
+  
+  // Day 36: composite MapLibre + deck.gl canvases, encode, and prompt
+  // the native save dialog. A cancelled dialog (path === null) is
+  // treated as a silent no-op by saveBinaryFile, not an error.
+  async function handleExportMap(format: ExportFormat) {
+    if (!containerRef.current) throw new Error("Map container not ready");
+    const blob = await exportMapToBlob({
+      mapRef,
+      containerEl: containerRef.current,
+      format,
+    });
+    const bytes = await blobToUint8Array(blob);
+    await saveBinaryFile(bytes, {
+      defaultFileName: `oc-ecv-map.${format === "jpeg" ? "jpg" : "png"}`,
+      filterName: format === "jpeg" ? "JPEG Image" : "PNG Image",
+      extensions: [format === "jpeg" ? "jpg" : "png"],
+    });
+  }
 
   function handlePan(direction: PanDirection) {
     const maplibreMap = mapRef.current?.getMap();
@@ -413,8 +434,16 @@ export default function MapView({
         style={{ width: "100%", height: "100%" }}
         mapStyle={BASE_STYLE}
         onLoad={() => setMapLoaded(true)}
+        // Day 36: WebGL clears its drawing buffer immediately after each
+        // frame paints by default — getCanvas() would return a blank/
+        // garbage buffer at the moment of export capture without this.
+        // NOTE: as of maplibre-gl v5.0.0, preserveDrawingBuffer moved
+        // from a top-level MapOptions field into canvasContextAttributes
+        // — a flat preserveDrawingBuffer prop no longer exists on v6.1.0
+        // (confirmed via the TS error react-map-gl correctly surfaced).
+        canvasContextAttributes={{ preserveDrawingBuffer: true }}
       >
-        <DeckGLOverlay layers={layers} getTooltip={getTooltip} />
+      <DeckGLOverlay layers={layers} getTooltip={getTooltip} />
       </Map>
       <div className="map-view-toolbar-overlay">
         <MapToolbar
@@ -426,6 +455,9 @@ export default function MapView({
           graticuleOn={graticuleOn}
           onToggleGraticule={() => setGraticuleOn((v) => !v)}
         />
+      </div>
+      <div className="map-view-export-overlay">
+        <ExportButton onExport={handleExportMap} label="Export Map" />
       </div>
     </div>
   );

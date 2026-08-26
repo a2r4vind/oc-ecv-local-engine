@@ -1,12 +1,28 @@
+import { useRef } from "react";
 import Plot from "react-plotly.js";
 import type { HistogramResult } from "../../services/backendApi";
-
+import ExportButton from "../ExportButton/ExportButton";
+import { exportPlotToBlob } from "../../utils/chartExport";
+import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import type { ExportFormat } from "../../utils/mapExport";
 interface HistogramChartProps {
   data: HistogramResult;
   variable: string;
 }
-
 export default function HistogramChart({ data, variable }: HistogramChartProps) {
+  const graphDivRef = useRef<HTMLElement | null>(null);
+
+  async function handleExport(format: ExportFormat) {
+    if (!graphDivRef.current) throw new Error("Chart not ready");
+    const blob = await exportPlotToBlob({ graphDiv: graphDivRef.current, format });
+    const bytes = await blobToUint8Array(blob);
+    await saveBinaryFile(bytes, {
+      defaultFileName: `oc-ecv-histogram-${variable}.${format === "jpeg" ? "jpg" : "png"}`,
+      filterName: format === "jpeg" ? "JPEG Image" : "PNG Image",
+      extensions: [format === "jpeg" ? "jpg" : "png"],
+    });
+  }
+
   const edges = data.bin_edges ?? [];
   const counts = data.counts ?? [];
   // Plotly's "bar" type wants center positions + explicit widths, not
@@ -42,14 +58,21 @@ export default function HistogramChart({ data, variable }: HistogramChartProps) 
           yaxis: { title: { text: "Pixel count" } },
           bargap: 0.02,
         }}
+        
         style={{ width: "100%" }}
         useResizeHandler
         config={{ displaylogo: false, responsive: true }}
+        onInitialized={(_fig, gd) => { graphDivRef.current = gd; }}
+        onUpdate={(_fig, gd) => { graphDivRef.current = gd; }}
       />
       <p style={{ fontSize: "0.8rem", color: "#555", textAlign: "center" }}>
         Valid pixels: {data.valid_pixel_count?.toLocaleString()} · Mean:{" "}
         {data.mean?.toFixed(4)} · Std: {data.std?.toFixed(4)}
       </p>
+      <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
+        <ExportButton onExport={handleExport} label="Export Chart" />
+      </div>
     </div>
   );
 }
+    

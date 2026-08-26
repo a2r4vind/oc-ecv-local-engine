@@ -1,11 +1,27 @@
+import { useRef } from "react";
 import Plot from "react-plotly.js";
 import type { ScatterResult } from "../../services/backendApi";
-
+import ExportButton from "../ExportButton/ExportButton";
+import { exportPlotToBlob } from "../../utils/chartExport";
+import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import type { ExportFormat } from "../../utils/mapExport";
 interface ScatterChartProps {
   data: ScatterResult;
 }
-
 export default function ScatterChart({ data }: ScatterChartProps) {
+  const graphDivRef = useRef<HTMLElement | null>(null);
+
+  async function handleExport(format: ExportFormat) {
+    if (!graphDivRef.current) throw new Error("Chart not ready");
+    const blob = await exportPlotToBlob({ graphDiv: graphDivRef.current, format });
+    const bytes = await blobToUint8Array(blob);
+    await saveBinaryFile(bytes, {
+      defaultFileName: `oc-ecv-scatter-${data.variable_x}-vs-${data.variable_y}.${format === "jpeg" ? "jpg" : "png"}`,
+      filterName: format === "jpeg" ? "JPEG Image" : "PNG Image",
+      extensions: [format === "jpeg" ? "jpg" : "png"],
+    });
+  }
+
   const wasSubsampled =
     (data.total_pair_count ?? 0) > (data.returned_pair_count ?? 0);
 
@@ -35,20 +51,27 @@ export default function ScatterChart({ data }: ScatterChartProps) {
           xaxis: { title: { text: data.variable_x } },
           yaxis: { title: { text: data.variable_y } },
         }}
+        
         style={{ width: "100%" }}
         useResizeHandler
         config={{ displaylogo: false, responsive: true }}
+        onInitialized={(_fig, gd) => { graphDivRef.current = gd; }}
+        onUpdate={(_fig, gd) => { graphDivRef.current = gd; }}
       />
       <p style={{ fontSize: "0.8rem", color: "#555", textAlign: "center" }}>
         {data.returned_pair_count?.toLocaleString()} pixel pairs
         {wasSubsampled &&
           ` (subsampled from ${data.total_pair_count?.toLocaleString()})`}
         {" · "}
+        
         Correlation:{" "}
         {data.correlation !== null && data.correlation !== undefined
           ? data.correlation.toFixed(4)
           : "n/a"}
       </p>
+      <div style={{ display: "flex", justifyContent: "center", marginTop: "4px" }}>
+        <ExportButton onExport={handleExport} label="Export Chart" />
+      </div>
     </div>
   );
 }

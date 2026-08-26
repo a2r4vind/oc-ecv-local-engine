@@ -1,0 +1,20 @@
+/* frontend/src/components/ExportButton/ExportButton.css */
+.export-button-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--oc-font-sans);
+}
+.export-button-group select {
+  font-size: 0.85rem;
+  padding: 2px 4px;
+}
+.export-button-group button {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.export-button-group .export-error {
+  color: #b91c1c;
+  font-size: 0.75rem;
+}
