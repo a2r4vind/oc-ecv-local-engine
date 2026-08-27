@@ -28,6 +28,17 @@ from datetime import datetime, timezone
 
 DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "query_cache.db"
 
+# Bump this whenever compute_regional_stats()/_get_subsetted_data()/any
+# downstream computation logic changes in a way that could change a
+# result for previously-cached query parameters. Folded into the cache
+# key so a code change automatically invalidates old entries instead of
+# silently serving stale results — the exact gap identified in Days
+# 19-21 (the valid_min/valid_max fix was masked by stale cache hits
+# until manually cleared). This is a blunt instrument (any bump
+# invalidates the entire cache, not just affected queries) but that's
+# the correct tradeoff here: a missed bump silently serves wrong data,
+# while an over-cautious bump just costs some avoidable recomputation.
+CACHE_VERSION = 2
 
 def _ensure_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -35,6 +46,7 @@ def _ensure_db():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS query_cache (
             cache_key TEXT PRIMARY KEY,
+            cache_version INTEGER NOT NULL DEFAULT 1,
             file_path TEXT NOT NULL,
             file_mtime REAL NOT NULL,
             variable TEXT NOT NULL,
@@ -55,6 +67,7 @@ def _compute_cache_key(
     start_date: str | None, end_date: str | None, quality_flags: list[str] | None,
 ) -> str:
     raw = json.dumps({
+        "cache_version": CACHE_VERSION,
         "file_path": os.path.abspath(file_path),
         "file_mtime": file_mtime,
         "variable": variable,
@@ -110,12 +123,12 @@ def store_result(
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
         INSERT OR REPLACE INTO query_cache
-        (cache_key, file_path, file_mtime, variable, lat_min, lat_max, lon_min, lon_max,
+        (cache_key, cache_version, file_path, file_mtime, variable, lat_min, lat_max, lon_min, lon_max,
          start_date, end_date, quality_flags, result_json, created_at, hit_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 COALESCE((SELECT hit_count FROM query_cache WHERE cache_key = ?), 0))
     """, (
-        key, os.path.abspath(file_path), file_mtime, variable,
+        key, CACHE_VERSION, os.path.abspath(file_path), file_mtime, variable,
         lat_min, lat_max, lon_min, lon_max, start_date, end_date,
         json.dumps(quality_flags) if quality_flags else None,
         json.dumps(result, default=str),
