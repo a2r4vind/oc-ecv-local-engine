@@ -19,6 +19,8 @@ import {
 } from "./services/backendApi";
 import RawExportButton from "./components/RawExportButton/RawExportButton";
 import { exportRawData } from "./utils/dataExport";
+import GeoExportButton from "./components/GeoExportButton/GeoExportButton";
+import { exportGeoData } from "./utils/geoExport";
 import { COLORMAP_NAMES, type ColormapName } from "./utils/colormaps";
 import ColorLegend from "./components/ColorLegend/ColorLegend";
 import OpacitySlider from "./components/OpacitySlider/OpacitySlider";
@@ -325,6 +327,13 @@ function App() {
                     onExport={async (format) => {
                       await exportRawData(lastQuery, format);
                       }} 
+                  />
+                )}
+                {lastQuery && (
+                  <GeoExportButton
+                    onExport={async () => {
+                      await exportGeoData(lastQuery);
+                    }}
                   />
                 )}
               </div>

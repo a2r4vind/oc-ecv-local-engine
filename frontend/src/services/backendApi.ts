@@ -431,6 +431,60 @@ export async function fetchRawExport(
 }
 
 
+// Day 38: georeferenced export (.tif / .nc) — same StatsQuery shape as
+// /export-raw, but with no `format` param: the backend decides GeoTIFF
+// (flat-grid) vs. CF-1.8 NetCDF (swath) based on file structure, since
+// that's the whole point of this endpoint (pick the format that can
+// represent each structure's real geometry without inventing data via
+// regridding). The response's X-Export-Kind header tells the caller
+// which one it got, so the saved file's extension always matches its
+// actual contents rather than being guessed client-side.
+export type GeoExportKind = "geotiff" | "netcdf_swath";
+
+export interface GeoExportResult {
+  blob: Blob;
+  exportKind: GeoExportKind;
+}
+
+export async function fetchGeoExport(query: StatsQuery): Promise<GeoExportResult> {
+  const params = new URLSearchParams({
+    path: query.filePath,
+    variable: query.variable,
+    lat_min: String(query.latMin),
+    lat_max: String(query.latMax),
+    lon_min: String(query.lonMin),
+    lon_max: String(query.lonMax),
+  });
+  if (query.startDate) params.set("start_date", query.startDate);
+  if (query.endDate) params.set("end_date", query.endDate);
+  if (query.qualityFlags && query.qualityFlags.length > 0) {
+    params.set("quality_flags", query.qualityFlags.join(","));
+  }
+
+  const res = await fetch(`${BASE_URL}/export-geo?${params.toString()}`);
+  if (!res.ok) {
+    let message = `Backend returned status ${res.status}`;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) message = errJson.error;
+    } catch {
+      // error responses are JSON (see server.py's JSONResponse on
+      // GeoExportError), but guard anyway for consistency with the
+      // other fetch* functions above.
+    }
+    throw new Error(message);
+  }
+
+  const exportKind = res.headers.get("X-Export-Kind") as GeoExportKind | null;
+  if (exportKind !== "geotiff" && exportKind !== "netcdf_swath") {
+    throw new Error(`Unexpected X-Export-Kind header: ${exportKind}`);
+  }
+
+  const blob = await res.blob();
+  return { blob, exportKind };
+}
+
+
 export interface DateCoverageFileEntry {
   file_name: string;
   has_time_info: boolean;

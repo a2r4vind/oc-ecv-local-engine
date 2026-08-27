@@ -29,6 +29,7 @@ from processing.statistics import compute_histogram, compute_scatter_correlation
 from processing.raster import compute_regional_raster, RasterError
 from processing.raw_export import compute_raw_export, RawExportError
 from processing.temporal_filter import scan_directory_date_coverage, TemporalFilterError
+from processing.geo_export import compute_geo_export, GeoExportError
 
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
@@ -51,6 +52,7 @@ app.add_middleware(
     expose_headers=[
         "X-Raster-Type", "X-Value-Min", "X-Value-Max",
         "X-Bounds", "X-Grid-Shape", "X-Point-Count",
+        "X-Export-Kind",
     ],
 )
 
@@ -102,6 +104,7 @@ def diagnostics():
         results["xarray"] = xarray.__version__
     except Exception as e:
         results["xarray_error"] = str(e)
+    
     return results
 
 
@@ -227,6 +230,41 @@ def export_raw(
     headers = {"Content-Disposition": f'attachment; filename="oc-ecv-export.{ext}"'}
     return Response(content=payload, media_type=media_type, headers=headers)
 
+
+@app.get("/export-geo")
+def export_geo(
+    path: str,
+    variable: str,
+    lat_min: float,
+    lat_max: float,
+    lon_min: float,
+    lon_max: float,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    quality_flags: Optional[str] = None,
+):
+    """
+    Day 38: georeferenced raster export. Format is determined by file
+    structure, not a caller choice — flat-grid exports as GeoTIFF,
+    swath exports as CF-1.8 NetCDF (preserving native per-pixel geometry
+    rather than regridding/interpolating onto a GeoTIFF-compatible grid).
+    Same subsetting/masking pipeline as /stats, /raster, /export-raw.
+    """
+    flags_list = quality_flags.split(",") if quality_flags else None
+    try:
+        payload, media_type, export_kind = compute_geo_export(
+            path, variable, lat_min, lat_max, lon_min, lon_max,
+            start_date=start_date, end_date=end_date, quality_flags=flags_list,
+        )
+    except (StatisticsError, QualityMaskError, IngestionError, GeoExportError) as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+    ext = "tif" if export_kind == "geotiff" else "nc"
+    headers = {
+        "Content-Disposition": f'attachment; filename="oc-ecv-export.{ext}"',
+        "X-Export-Kind": export_kind,
+    }
+    return Response(content=payload, media_type=media_type, headers=headers)
 
 
 @app.get("/timeseries-within-file")
