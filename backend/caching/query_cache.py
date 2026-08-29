@@ -106,6 +106,49 @@ def get_cached_result(
     return json.loads(row[0]) if row else None
 
 
+def get_history(limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    """
+    Returns the most recent cache entries as a browsable query history —
+    Day 39's data source, reusing this table exactly as anticipated in
+    the Day 18 module docstring. Read-only: does not touch hit_count or
+    any other column. Returns query parameters only, not result_json —
+    reloading re-fires the actual endpoint (e.g. /stats), which will hit
+    cache and return near-instantly rather than duplicating result
+    payloads here.
+    """
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    total = conn.execute("SELECT COUNT(*) FROM query_cache").fetchone()[0]
+    rows = conn.execute(
+        """
+        SELECT cache_key, file_path, variable, lat_min, lat_max, lon_min, lon_max,
+               start_date, end_date, quality_flags, created_at, hit_count
+        FROM query_cache
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ).fetchall()
+    conn.close()
+
+    entries = []
+    for row in rows:
+        entries.append({
+            "cache_key": row["cache_key"],
+            "file_path": row["file_path"],
+            "file_name": Path(row["file_path"]).name,
+            "variable": row["variable"],
+            "lat_min": row["lat_min"], "lat_max": row["lat_max"],
+            "lon_min": row["lon_min"], "lon_max": row["lon_max"],
+            "start_date": row["start_date"], "end_date": row["end_date"],
+            "quality_flags": json.loads(row["quality_flags"]) if row["quality_flags"] else None,
+            "created_at": row["created_at"],
+            "hit_count": row["hit_count"],
+        })
+    return {"total": total, "entries": entries}
+
+
 def store_result(
     file_path: str, variable: str,
     lat_min: float, lat_max: float, lon_min: float, lon_max: float,

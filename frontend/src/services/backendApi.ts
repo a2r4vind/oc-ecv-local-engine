@@ -504,6 +504,44 @@ export interface DateCoverageResult {
   per_file: DateCoverageFileEntry[];
 }
 
+
+export interface HistoryEntry {
+  cache_key: string;
+  file_path: string;
+  file_name: string;
+  variable: string;
+  lat_min: number;
+  lat_max: number;
+  lon_min: number;
+  lon_max: number;
+  start_date: string | null;
+  end_date: string | null;
+  quality_flags: string[] | null;
+  created_at: string;
+  hit_count: number;
+}
+
+export interface HistoryResult {
+  total: number;
+  entries: HistoryEntry[];
+  error?: string;
+}
+
+// Day 39: read-only browse of past queries, sourced from the query_cache
+// table (Day 18, cache_version-aware since the Day 39 prerequisite fix).
+export async function fetchHistory(limit = 50, offset = 0): Promise<HistoryResult> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const res = await fetch(`${BASE_URL}/history?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(`Backend returned status ${res.status}`);
+  }
+  return res.json();
+}
+
+
 export async function scanDateCoverage(directory: string): Promise<DateCoverageResult> {
   const res = await fetch(`${BASE_URL}/batch-date-coverage?directory=${encodeURIComponent(directory)}`);
   if (!res.ok) throw new Error(await res.text());

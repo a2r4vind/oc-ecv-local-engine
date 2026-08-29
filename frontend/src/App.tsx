@@ -30,10 +30,12 @@ import ScatterPanel from "./components/ScatterPanel/ScatterPanel";
 import TimeSeriesChart from "./components/TimeSeriesChart/TimeSeriesChart";
 import HistogramChart from "./components/HistogramChart/HistogramChart";
 import ScatterChart from "./components/ScatterChart/ScatterChart";
+import HistoryPanel from "./components/HistoryPanel/HistoryPanel";
+import { ingestFile, type HistoryEntry } from "./services/backendApi";
 import type { NormalizedTimeSeries } from "./utils/timeseries";
 import "./App.css";
 
-type Mode = "stats" | "timeseries" | "histogram" | "scatter";
+type Mode = "stats" | "timeseries" | "histogram" | "scatter" | "history";
 
 function App() {
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
@@ -47,7 +49,11 @@ function App() {
     timeseries: null,
     histogram: null,
     scatter: null,
+    history: null,
   });
+  // Bumped after every successful reload so HistoryPanel's own effect
+  // re-fetches and shows the just-run query at the top of the list.
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
 
   const [activeMode, setActiveMode] = useState<Mode>("stats");
 
@@ -79,7 +85,7 @@ function App() {
     setIngestedResult(result);
     setStatsResult(null);
     setStatsError(null);
-    setBboxByMode({ stats: null, timeseries: null, histogram: null, scatter: null });
+    setBboxByMode({ stats: null, timeseries: null, histogram: null, scatter: null, history: null });
     setRasterResult(null);
     setRasterError(null);
     setTsResult(null);
@@ -96,7 +102,7 @@ function App() {
     setIngestedResult(null);
     setStatsResult(null);
     setStatsError(null);
-    setBboxByMode({ stats: null, timeseries: null, histogram: null, scatter: null });
+    setBboxByMode({ stats: null, timeseries: null, histogram: null, scatter: null, history: null });
     setRasterResult(null);
     setRasterError(null);
     setTsResult(null);
@@ -164,6 +170,57 @@ function App() {
 
     await Promise.all([statsTask, rasterTask]);
   }
+  
+  // Day 39: reload a past query from HistoryPanel. Cross-file (Option
+  // B): re-ingests the entry's file first if it isn't the one currently
+  // loaded — reusing the same ingestFile() call FileUploader makes
+  // internally, so there's exactly one ingestion code path in the app,
+  // not two. Bypasses ParameterSelector's own form state entirely (same
+  // pattern as Day 37's lastQuery snapshot) and executes the historical
+  // parameters directly.
+  async function handleReloadHistoryEntry(entry: HistoryEntry) {
+    if (entry.file_path !== ingestedFilePath) {
+      try {
+        const ingestResult = await ingestFile(entry.file_path);
+        if (ingestResult.error) {
+          setStatsError(`Could not reload ${entry.file_name}: ${ingestResult.error}`);
+          return;
+        }
+        handleIngested(entry.file_path, ingestResult);
+      } catch (err) {
+        setStatsError(
+          err instanceof Error
+            ? `Could not reach backend: ${err.message}`
+            : "Unknown error reloading file"
+        );
+        return;
+      }
+    }
+
+    setBboxByMode((prev) => ({
+      ...prev,
+      stats: {
+        latMin: entry.lat_min,
+        latMax: entry.lat_max,
+        lonMin: entry.lon_min,
+        lonMax: entry.lon_max,
+      },
+    }));
+    setActiveMode("stats");
+
+    await handleQuerySubmit({
+      filePath: entry.file_path,
+      variable: entry.variable,
+      latMin: entry.lat_min,
+      latMax: entry.lat_max,
+      lonMin: entry.lon_min,
+      lonMax: entry.lon_max,
+      startDate: entry.start_date ?? undefined,
+      endDate: entry.end_date ?? undefined,
+    });
+
+    setHistoryRefreshToken((n) => n + 1);
+  }
 
   const availableVariables =
     ingestedResult?.metadata?.variables?.filter((v) => v !== "l2_flags") ?? [];
@@ -203,6 +260,7 @@ function App() {
     timeseries: "Time Series",
     histogram: "Histogram",
     scatter: "Scatter",
+    history: "History",
   };
 
   return (
@@ -293,6 +351,16 @@ function App() {
                 onResult={setScatterResult}
                 bbox={bboxByMode.scatter}
                 onBboxChange={setBboxForMode("scatter")}
+              />
+            </div>
+            {/* Intentionally NOT keyed to ingestedFilePath — history is
+                cross-file by design (Option B) and must survive file
+                switches to remain useful, unlike the query-specific
+                panels above. */}
+            <div className={activeMode === "history" ? "sidebar-panel-item" : "sidebar-panel-item hidden"}>
+              <HistoryPanel
+                onReload={handleReloadHistoryEntry}
+                refreshToken={historyRefreshToken}
               />
             </div>
           </aside>

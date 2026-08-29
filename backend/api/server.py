@@ -30,6 +30,7 @@ from processing.raster import compute_regional_raster, RasterError
 from processing.raw_export import compute_raw_export, RawExportError
 from processing.temporal_filter import scan_directory_date_coverage, TemporalFilterError
 from processing.geo_export import compute_geo_export, GeoExportError
+from caching.query_cache import get_history
 
 
 app = FastAPI(title="OC-ECV Local Engine Backend")
@@ -401,6 +402,24 @@ def batch_date_coverage(directory: str):
         return json.loads(json.dumps(result, default=str))
     except TemporalFilterError as e:
         raise HTTPException(status_code=400, detail=str(e))
+   
+
+@app.get("/history")
+def get_query_history(limit: int = 50, offset: int = 0):
+    """
+    Day 39: read-only browse of past queries, sourced from the same
+    query_cache table Day 18 built (cache_version-aware since the Day 39
+    prerequisite fix). Returns query parameters only, not results —
+    reloading a past query re-fires /stats, which will hit cache and
+    return near-instantly (Day 18: ~0.008s) rather than duplicating
+    result payloads here.
+    """
+    try:
+        result = get_history(limit=limit, offset=offset)
+        return _sanitize(result)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
     
 if __name__ == "__main__":
     # Fixed port for now; may need dynamic port allocation later if port
