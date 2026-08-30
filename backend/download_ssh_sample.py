@@ -7,6 +7,7 @@ Created on Tue Aug  4 06:58:39 2026
 """
 
 import earthaccess
+from config.paths import REAL_SSH_DATA
 
 auth = earthaccess.login(persist=True)
 
@@ -20,5 +21,5 @@ results = earthaccess.search_data(
 if not results:
     print("No granules found.")
 else:
-    files = earthaccess.download(results, "./real_ssh_data")
+    files = earthaccess.download(results, str(REAL_SSH_DATA))
     print(f"Downloaded: {files}")

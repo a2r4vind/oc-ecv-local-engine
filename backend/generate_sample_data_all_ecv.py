@@ -19,6 +19,7 @@ and are NOT covered by this fixture or the real_batch_data/ granules.
 import numpy as np
 import xarray as xr
 import pandas as pd
+from config.paths import SAMPLE_ALL_ECV
 
 lat = np.linspace(32.0, 38.0, 60)
 lon = np.linspace(-125.0, -118.0, 70)
@@ -106,7 +107,7 @@ ds = xr.Dataset(
     },
 )
 
-output_path = "sample_all_ecv.nc"
+output_path = str(SAMPLE_ALL_ECV)
 ds.to_netcdf(output_path)
 print(f"All-ECV sample file written to: {output_path}")
 print(f"Variables: {list(ds.data_vars.keys())}")

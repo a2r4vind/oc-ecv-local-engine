@@ -1,4 +1,5 @@
 import earthaccess
+from config.paths import REAL_BATCH_DATA
 
 auth = earthaccess.login(persist=True)
 
@@ -11,5 +12,5 @@ results = earthaccess.search_data(
 )
 
 print(f"Found {len(results)} granules")
-files = earthaccess.download(results, "./real_batch_data")
+files = earthaccess.download(results, str(REAL_BATCH_DATA))
 print(f"Downloaded {len(files)} files")

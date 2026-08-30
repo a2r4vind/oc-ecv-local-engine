@@ -10,9 +10,10 @@ Created on Thu Jul 30 12:10:05 2026
 comparing serialize_file_access=True vs False across repeated trials —
 proving (not assuming) whether cross-file HDF5 concurrency is safe."""
 import time
+from config.paths import REAL_BATCH_DATA
 from processing.statistics import compute_batch_timeseries
 
-DIRECTORY = "real_batch_data"
+DIRECTORY = str(REAL_BATCH_DATA)
 VARIABLE = "chlor_a"
 BBOX = (8, 15, 82, 90)  # Day 8's confirmed-valid Bay of Bengal region
 START_DATE = "2026-01-01"

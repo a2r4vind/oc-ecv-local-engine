@@ -7,6 +7,7 @@ Created on Tue Aug  4 06:47:30 2026
 """
 
 import earthaccess
+from config.paths import REAL_OSVW_DATA
 
 auth = earthaccess.login(persist=True)
 
@@ -19,5 +20,5 @@ results = earthaccess.search_data(
 if not results:
     print("No granules found.")
 else:
-    files = earthaccess.download(results, "./real_osvw_data")
+    files = earthaccess.download(results, str(REAL_OSVW_DATA))
     print(f"Downloaded: {files}")

@@ -1,6 +1,7 @@
 """Profiles compute_regional_stats() across realistic multi-variable workloads
 to find where time actually goes before parallelizing anything."""
 import time
+from config.paths import LARGE_SAMPLE_OCEANCOLOR
 from processing.statistics import compute_regional_stats, compute_regional_stats_multivar
 
 VARIABLES = ["chlor_a", "Rrs_443", "Rrs_555"]  # extend to all bands you support
@@ -17,7 +18,7 @@ def profile_serial_multivar(path, variables, bbox):
     return time.perf_counter() - t0
 
 if __name__ == "__main__":
-    path = "large_sample_oceancolor.nc"
+    path = str(LARGE_SAMPLE_OCEANCOLOR)
     bbox = (33, 37, -124, -119)
 
     for v in VARIABLES:

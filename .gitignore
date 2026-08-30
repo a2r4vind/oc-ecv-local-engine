@@ -30,24 +30,23 @@ backend/*.spec
 # Spyder project metadata (local IDE config, not project source)
 .spyproject/
 
-# Sample/test data files (regenerate via generate_sample_data.py or
-# download_sample_real_data.py — don't commit binary data to git)
-backend/real_sample_data/
-backend/*.nc
-
 # Batch test data (regenerate via download_batch_real_data.py)
 backend/real_batch_data/
 
+# Sample/test data (regenerate via generate_*.py / download_*.py scripts —
+# don't commit binary satellite/synthetic data to git). Moved to project-root
+# test_data/ during Phase 5 (Day 43) to keep backend/ free of test fixtures
+# ahead of PyInstaller/Tauri packaging.
+test_data/
+
 # caching
 backend/cache/
-# Real satellite data for Days 19-21 buffer/review ECV testing (regenerate
-# via download_sst_sample.py / download_sss_sample.py / download_iop_sample.py
-# / download_osvw_sample.py / download_ssh_sample.py)
-backend/real_sst_data/
-backend/real_sss_data/
-backend/real_iop_data/
-backend/real_osvw_data/
-backend/real_ssh_data/
 
 saved_exports
 tmp/
+
+# Sample/test data (regenerate via generate_*.py / download_*.py scripts —
+# don't commit binary satellite/synthetic data to git). Moved to project-root
+# test_data/ during Phase 5 (Day 43) to keep backend/ free of test fixtures
+# ahead of PyInstaller/Tauri packaging.
+test_data/

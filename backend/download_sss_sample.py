@@ -7,6 +7,7 @@ Created on Mon Aug  3 12:24:30 2026
 """
 
 import earthaccess
+from config.paths import REAL_SSS_DATA
 
 auth = earthaccess.login(persist=True)
 
@@ -19,5 +20,5 @@ results = earthaccess.search_data(
 if not results:
     print("No granules found — try widening the date range.")
 else:
-    files = earthaccess.download(results, "./real_sss_data")
+    files = earthaccess.download(results, str(REAL_SSS_DATA))
     print(f"Downloaded: {files}")

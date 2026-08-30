@@ -19,6 +19,7 @@ handle truly large satellite products in Phase 2's processing pipeline.
 import time
 import numpy as np
 import netCDF4
+from config.paths import LARGE_SAMPLE_OCEANCOLOR
 
 # Tune these to control final file size. Rough size estimate:
 # TIME * LAT * LON * 4 bytes (float32) * NUM_VARS
@@ -26,7 +27,7 @@ import netCDF4
 TIME_STEPS = 10
 LAT_SIZE = 4000
 LON_SIZE = 5000
-OUTPUT_PATH = "large_sample_oceancolor.nc"
+OUTPUT_PATH = str(LARGE_SAMPLE_OCEANCOLOR)
 
 rng = np.random.default_rng(42)
 

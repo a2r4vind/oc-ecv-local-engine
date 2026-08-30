@@ -21,6 +21,7 @@ against realistic structure.
 import numpy as np
 import xarray as xr
 import pandas as pd
+from config.paths import SAMPLE_OCEANCOLOR
 
 # Spatial grid — a small region, e.g. off the California coast
 lat = np.linspace(32.0, 38.0, 60)
@@ -73,7 +74,7 @@ ds = xr.Dataset(
     },
 )
 
-output_path = "sample_oceancolor.nc"
+output_path = str(SAMPLE_OCEANCOLOR)
 ds.to_netcdf(output_path)
 print(f"Sample file written to: {output_path}")
 print(ds)
