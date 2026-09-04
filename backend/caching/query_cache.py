@@ -22,11 +22,29 @@ import sqlite3
 import json
 import hashlib
 import os
+import sys
 from pathlib import Path
 from typing import Any
 from datetime import datetime, timezone
 
-DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "query_cache.db"
+# Day 44 fix: Path(__file__).resolve() inside a PyInstaller --onefile
+# frozen binary resolves to a path INSIDE the bootloader's temp
+# extraction directory (e.g. /tmp/_MEIxxxxxx/), which is a fresh random
+# location on every launch and is not guaranteed to persist after the
+# process exits. Confirmed via lsof + direct inspection on Day 44: the
+# cache was silently living at /tmp/_MEI8jkVn6/cache/query_cache.db
+# rather than backend/cache/query_cache.db, meaning every "verified
+# through the compiled sidecar" caching claim since Day 18 was checking
+# real behavior only WITHIN a single running session — the cache never
+# actually persisted across app restarts in the shipped build.
+# sys.executable is the actual, stable on-disk path of the compiled
+# binary itself (e.g. frontend/src-tauri/binaries/oc-ecv-backend-...),
+# which does not move between launches.
+if getattr(sys, "frozen", False):
+    DB_PATH = Path(sys.executable).resolve().parent / "cache" / "query_cache.db"
+else:
+    DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "query_cache.db"
+
 
 # Bump this whenever compute_regional_stats()/_get_subsetted_data()/any
 # downstream computation logic changes in a way that could change a
