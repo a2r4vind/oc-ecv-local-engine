@@ -49,4 +49,7 @@ tmp/
 # don't commit binary satellite/synthetic data to git). Moved to project-root
 # test_data/ during Phase 5 (Day 43) to keep backend/ free of test fixtures
 # ahead of PyInstaller/Tauri packaging.
-test_data/
+test_data/docs/memory_logs/
+
+# docs/memory_logs
+docs/memory_logs/
