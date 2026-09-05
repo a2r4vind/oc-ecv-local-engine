@@ -34,6 +34,31 @@ class StatisticsError(Exception):
     """Raised when statistics can't be computed (bad inputs, no valid data, etc.)."""
     pass
 
+# Day 45: moved here (previously declared just above
+# compute_regional_stats_multivar, much further down) and upgraded from
+# Lock to RLock. Root cause: _get_subsetted_data() — the shared file-
+# open/close dispatch used by EVERY entrypoint (/stats, /raster,
+# /histogram, /scatter) — had NO lock protection at all. Only the
+# multi-variable (/stats-multi) and batch (/batch-timeseries) wrappers
+# locked around their own compute_regional_stats() calls; a single
+# /stats request and a single /raster request against the SAME file
+# (fired concurrently via App.tsx's Promise.all) went completely
+# unlocked. Reproduced directly: RuntimeError: NetCDF: Not a valid ID,
+# raised from inside netCDF4's own Dataset.close() during
+# _get_subsetted_data's finally block — one thread's concurrent open/
+# close corrupted this HDF5 build's shared internal state out from
+# under the other thread, consistent with Day 16's original finding
+# that this build isn't thread-safe for concurrent access to one
+# physical file. Locking moved into _get_subsetted_data() itself so
+# every caller is covered automatically, rather than requiring each new
+# endpoint to remember to wrap its own call. Upgraded to RLock because
+# compute_regional_stats_multivar/compute_batch_timeseries already
+# acquire this same lock one level up before calling
+# compute_regional_stats() -> _get_subsetted_data(); with a plain Lock,
+# that nested same-thread acquisition would deadlock. RLock still fully
+# serializes access across different threads, which is the actual
+# property Day 16 established as necessary.
+_netcdf_file_lock = threading.RLock()
 
 def compute_statistics(values: np.ndarray) -> dict[str, Any]:
     """
@@ -272,75 +297,88 @@ def _get_subsetted_data(
     (which needs the array + its coordinates, not a scalar reduction) can
     reuse the exact same structure-detection and subsetting logic instead
     of duplicating it.
+
+    Day 45: entire body now runs under _netcdf_file_lock. This is the
+    ONE place every endpoint's file access funnels through, so locking
+    here (rather than in each individual endpoint/caller) closes the gap
+    that let /stats and /raster race against each other unprotected.
     """
-    data_group, nav_group = _find_data_and_nav_groups(file_path)
+    with _netcdf_file_lock:
+        data_group, nav_group = _find_data_and_nav_groups(file_path)
 
-    if data_group:
-        if start_date or end_date:
-            raise StatisticsError(
-                "Temporal filtering is not applicable to single-granule swath "
-                "files (each file already represents one short time window)"
-            )
-        if not nav_group:
-            raise StatisticsError("Grouped/swath file has no navigation_data group")
-
-        data_ds = open_dataset(file_path, group=data_group)
-        nav_ds = open_dataset(file_path, group=nav_group)
-        try:
-            result = _compute_swath_stats(
-                data_ds, nav_ds, variable, lat_min, lat_max, lon_min, lon_max,
-                quality_flags, return_coords=return_coords,
-            )
-        finally:
-            data_ds.close()
-            nav_ds.close()
-        structure_type = "swath"
-
-    else:
-        ds = open_dataset(file_path)
-        try:
-            lat_name, _ = _get_lat_lon_names(ds)
-            is_swath_shaped = ds[lat_name].ndim == 2
-        except StatisticsError:
-            is_swath_shaped = False
-
-        if is_swath_shaped:
+        if data_group:
             if start_date or end_date:
                 raise StatisticsError(
-                    "Temporal filtering is not applicable to single-granule "
-                    "swath-shaped files"
+                    "Temporal filtering is not applicable to single-granule swath "
+                    "files (each file already represents one short time window)"
                 )
+            if not nav_group:
+                raise StatisticsError("Grouped/swath file has no navigation_data group")
+
+            data_ds = open_dataset(file_path, group=data_group)
+            nav_ds = open_dataset(file_path, group=nav_group)
             try:
                 result = _compute_swath_stats(
-                    ds, ds, variable, lat_min, lat_max, lon_min, lon_max,
+                    data_ds, nav_ds, variable, lat_min, lat_max, lon_min, lon_max,
                     quality_flags, return_coords=return_coords,
                 )
             finally:
-                ds.close()
+                data_ds.close()
+                nav_ds.close()
             structure_type = "swath"
+
         else:
-            if quality_flags:
-                raise StatisticsError(
-                    "Quality-flag masking is not applicable to flat-grid files "
-                    "(no l2_flags variable present)"
-                )
+            ds = open_dataset(file_path)
             try:
-                result = _compute_flat_grid_stats(
-                    ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date,
-                    return_coords=return_coords,
-                )
-            finally:
-                ds.close()
-            structure_type = "flat_grid"
-    
-    if return_coords:
-        values, lat_coords, lon_coords, time_coords = result
+                lat_name, _ = _get_lat_lon_names(ds)
+                is_swath_shaped = ds[lat_name].ndim == 2
+            except StatisticsError:
+                is_swath_shaped = False
+
+            if is_swath_shaped:
+                if start_date or end_date:
+                    raise StatisticsError(
+                        "Temporal filtering is not applicable to single-granule "
+                        "swath-shaped files"
+                    )
+                try:
+                    result = _compute_swath_stats(
+                        ds, ds, variable, lat_min, lat_max, lon_min, lon_max,
+                        quality_flags, return_coords=return_coords,
+                    )
+                finally:
+                    ds.close()
+                structure_type = "swath"
+            else:
+                if quality_flags:
+                    raise StatisticsError(
+                        "Quality-flag masking is not applicable to flat-grid files "
+                        "(no l2_flags variable present)"
+                    )
+                try:
+                    result = _compute_flat_grid_stats(
+                        ds, variable, lat_min, lat_max, lon_min, lon_max, start_date, end_date,
+                        return_coords=return_coords,
+                    )
+                finally:
+                    ds.close()
+                structure_type = "flat_grid"
+
+        if return_coords:
+            values, lat_coords, lon_coords, time_coords = result
+            return {
+                "values": values,
+                "structure_type": structure_type,
+                "lat_coords": lat_coords,
+                "lon_coords": lon_coords,
+                "time_coords": time_coords,
+            }
         return {
-            "values": values,
+            "values": result,
             "structure_type": structure_type,
-            "lat_coords": lat_coords,
-            "lon_coords": lon_coords,
-            "time_coords": time_coords,
+            "lat_coords": None,
+            "lon_coords": None,
+            "time_coords": None,
         }
     return {
         "values": result,
@@ -559,7 +597,6 @@ def compute_scatter_correlation(
     }
 
 
-_netcdf_file_lock = threading.Lock()
 
 def compute_regional_stats_multivar(
     path: str,
