@@ -90,7 +90,7 @@ LOG_DIR = Path(__file__).resolve().parent.parent / "docs" / "memory_logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 SIDECAR_NAME_HINT = "oc-ecv-backend"
-WEBVIEW_NAME_HINT = "oc-ecv-local-engine"  # PLACEHOLDER — verify, see docstring
+WEBVIEW_NAME_HINT = "oc-ecv-local_engine"  # PLACEHOLDER — verify, see docstring
 
 SIDECAR_BASE_URL = "http://127.0.0.1:5321"
 

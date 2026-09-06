@@ -34,7 +34,7 @@ import HistoryPanel from "./components/HistoryPanel/HistoryPanel";
 import { ingestFile, type HistoryEntry } from "./services/backendApi";
 import type { NormalizedTimeSeries } from "./utils/timeseries";
 import "./App.css";
-
+ 
 type Mode = "stats" | "timeseries" | "histogram" | "scatter" | "history";
 
 function App() {
@@ -79,6 +79,22 @@ function App() {
     null
   );
   const [scatterResult, setScatterResult] = useState<ScatterResult | null>(null);
+  // Day 45 finding: ScatterChart's scattergl trace recreates its
+  // WebGL/regl context on every Plotly.react() call (confirmed via
+  // DevTools stack trace: react-plotly's own react() -> wrapREGL ->
+  // createContext, triggered on ordinary prop updates, NOT on
+  // mount/unmount). This is intrinsic to Plotly.js's scattergl
+  // implementation, independent of our component lifecycle or any
+  // remount-forcing attempt (tested and ruled out - remounting via key
+  // neither caused nor fixed this). Under this environment's tight
+  // WebGL context ceiling (WebKitGTK/Zink software rendering, see
+  // MESA/libEGL warnings in the Tauri terminal), repeated scatter
+  // queries trigger the browser's own graceful context-eviction
+  // ("oldest context will be lost") more readily than on
+  // hardware-accelerated GL. Confirmed the app continues functioning
+  // normally after eviction - no visible breakage across 15+
+  // consecutive queries. Documented as a known environment/library
+  // characteristic rather than an app-level leak; see Day 45 report.
 
   function handleIngested(filePath: string, result: IngestionResult) {
     setIngestedFilePath(filePath);

@@ -1,9 +1,11 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Plot from "react-plotly.js";
+import Plotly from "plotly.js-dist-min";
 import type { NormalizedTimeSeries } from "../../utils/timeseries";
 import ExportButton from "../ExportButton/ExportButton";
 import { exportPlotToBlob } from "../../utils/chartExport";
 import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import { loseAllWebGLContextsIn } from "../../utils/webglCleanup";
 import type { ExportFormat } from "../../utils/mapExport";
 interface TimeSeriesChartProps {
   data: NormalizedTimeSeries;
@@ -12,6 +14,21 @@ interface TimeSeriesChartProps {
 }
 export default function TimeSeriesChart({ data, variable, title }: TimeSeriesChartProps) {
   const graphDivRef = useRef<HTMLElement | null>(null);
+  
+  // Day 45: this chart genuinely unmounts every time the user switches
+  // away from the Time Series tab (App.tsx renders it conditionally on
+  // activeMode), not just on file change — a higher-frequency leak
+  // trigger than MapView's. react-plotly.js already calls Plotly.purge()
+  // internally on unmount, but explicit + immediate is cheap insurance
+  // against GC-timing gaps under rapid tab switching.
+  useEffect(() => {
+    return () => {
+      const el = graphDivRef.current;
+      if (!el) return;
+      Plotly.purge(el);
+      loseAllWebGLContextsIn(el as unknown as HTMLElement);
+    };
+  }, []);
 
   async function handleExport(format: ExportFormat) {
     if (!graphDivRef.current) throw new Error("Chart not ready");

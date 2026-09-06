@@ -1,16 +1,44 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import Plot from "react-plotly.js";
+import Plotly from "plotly.js-dist-min";
 import type { ScatterResult } from "../../services/backendApi";
 import ExportButton from "../ExportButton/ExportButton";
 import { exportPlotToBlob } from "../../utils/chartExport";
 import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import { loseAllWebGLContextsIn } from "../../utils/webglCleanup";
 import type { ExportFormat } from "../../utils/mapExport";
 interface ScatterChartProps {
   data: ScatterResult;
 }
 export default function ScatterChart({ data }: ScatterChartProps) {
   const graphDivRef = useRef<HTMLElement | null>(null);
-
+  
+  // Day 45 correction: switched from useEffect to useLayoutEffect.
+  // react-plotly.js's own newPlot()/purge() calls happen synchronously
+  // during React's commit phase (componentDidMount/componentWillUnmount
+  // timing), not deferred like a passive effect. A plain useEffect
+  // cleanup here ran AFTER the new ScatterChart instance's own
+  // componentDidMount had already called Plotly.newPlot() and created
+  // its fresh WebGL context — so our forced context-loss call was
+  // racing against (and often losing to) the next mount instead of
+  // running before it. Reproduced directly: repeated scatterRunId-keyed
+  // remounts started throwing "too many active WebGL contexts" only
+  // after ~6-7 cycles, consistent with a slow backlog under this
+  // environment's WebKitGTK/Zink software rendering (already a known
+  // constraint elsewhere in this project) rather than an immediate
+  // failure. useLayoutEffect runs synchronously in the same commit as
+  // the old instance's unmount, before the new instance's mount effects
+  // fire, closing that gap.
+  useLayoutEffect(() => {
+    return () => {
+      const el = graphDivRef.current;
+      if (!el) return;
+      Plotly.purge(el);
+      loseAllWebGLContextsIn(el as unknown as HTMLElement);
+    };
+  }, []);
+  
+ 
   async function handleExport(format: ExportFormat) {
     if (!graphDivRef.current) throw new Error("Chart not ready");
     const blob = await exportPlotToBlob({ graphDiv: graphDivRef.current, format });

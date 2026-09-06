@@ -1,9 +1,11 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Plot from "react-plotly.js";
+import Plotly from "plotly.js-dist-min";
 import type { HistogramResult } from "../../services/backendApi";
 import ExportButton from "../ExportButton/ExportButton";
 import { exportPlotToBlob } from "../../utils/chartExport";
 import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import { loseAllWebGLContextsIn } from "../../utils/webglCleanup";
 import type { ExportFormat } from "../../utils/mapExport";
 interface HistogramChartProps {
   data: HistogramResult;
@@ -11,6 +13,19 @@ interface HistogramChartProps {
 }
 export default function HistogramChart({ data, variable }: HistogramChartProps) {
   const graphDivRef = useRef<HTMLElement | null>(null);
+  
+  // Day 45: see TimeSeriesChart's identical comment — this chart also
+  // unmounts on every tab switch away from Histogram, not just on file
+  // change. Explicit purge + context-loss as insurance beyond
+  // react-plotly.js's own internal Plotly.purge()-on-unmount.
+  useEffect(() => {
+    return () => {
+      const el = graphDivRef.current;
+      if (!el) return;
+      Plotly.purge(el);
+      loseAllWebGLContextsIn(el as unknown as HTMLElement);
+    };
+  }, []);
 
   async function handleExport(format: ExportFormat) {
     if (!graphDivRef.current) throw new Error("Chart not ready");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Map, useControl, type MapRef } from "react-map-gl/maplibre";
-import { setWorkerUrl } from "maplibre-gl";
+import { setWorkerUrl, type Map as MaplibreMap } from "maplibre-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { BitmapLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { Layer, PickingInfo } from "@deck.gl/core";
@@ -14,6 +14,7 @@ import { addOrUpdateGraticule, removeGraticule } from "./Graticule";
 import ExportButton from "../ExportButton/ExportButton";
 import { exportMapToBlob, type ExportFormat } from "../../utils/mapExport";
 import { saveBinaryFile, blobToUint8Array } from "../../utils/saveFile";
+import { forceLoseWebGLContext, loseAllWebGLContextsIn } from "../../utils/webglCleanup";
 import "./MapView.css";
 
 // MapLibre GL v6 ships ESM-only and requires the worker URL to be wired
@@ -101,6 +102,17 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lastFittedRef = useRef<SpatialBounds | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  // Day 45: dedicated ref for WebGL disposal, populated in onLoad below
+  // (see that handler for why) and read only inside the unmount cleanup
+  // effect further down. Unlike mapRef (owned by react-map-gl, which
+  // nulls it during unmount BEFORE our cleanup runs) and unlike a
+  // mount-time capture of mapRef.current?.getMap() (confirmed via
+  // console.log to be undefined at mount — every other effect in this
+  // file that touches mapRef.current is already gated behind
+  // `mapLoaded` for this exact reason), this ref is set exactly once,
+  // by us, when the map is confirmed loaded, and nothing else writes to
+  // it — so it stays valid all the way through to our own cleanup.
+  const stableMapInstanceRef = useRef<MaplibreMap | null>(null);
 
   // Phase C state
   const [activeTool, setActiveTool] = useState<MapTool>("pan");
@@ -113,7 +125,8 @@ export default function MapView({
   useEffect(() => {
     onBboxChangeRef.current = onBboxChange;
   }, [onBboxChange]);
-
+  
+ 
   function fitToBounds(bounds: SpatialBounds) {
     if (!mapRef.current) return;
     const [latMin, latMax] = bounds.latRange;
@@ -260,6 +273,36 @@ export default function MapView({
       removeGraticule(maplibreMap);
     };
   }, [graticuleOn, mapLoaded]);
+  
+  // Day 45: explicit WebGL disposal on MapView unmount. Deliberately
+  // declared LAST among this component's effects — React runs multiple
+  // useEffect cleanups in the SAME order they were declared (not
+  // reversed) during unmount. Placing this last guarantees every other
+  // effect that depends on a live map instance (notably BboxDrawTool's
+  // tool.destroy(), which itself calls into the MapLibre map) has
+  // already torn down BEFORE we call maplibreMapInstance.remove().
+  // Declaring this earlier caused a real crash: our cleanup fired
+  // first, removed the map, and terra-draw's adapter then threw
+  // "this._map.getSource(i2).setData is not a function" trying to
+  // clean up against an already-destroyed map. stableMapInstanceRef is
+  // read here (not captured via closure) since it's the only ref we
+  // fully control ourselves — see its declaration and the onLoad
+  // handler above for why mapRef.current can't be trusted at either
+  // mount or cleanup time.
+  useEffect(() => {
+    const container = containerRef.current;
+
+    return () => {
+      const maplibreMapInstance = stableMapInstanceRef.current;
+      if (!maplibreMapInstance) return;
+      const mainCanvas = maplibreMapInstance.getCanvas();
+      if (container) {
+        loseAllWebGLContextsIn(container, mainCanvas);
+      }
+      maplibreMapInstance.remove();
+      forceLoseWebGLContext(mainCanvas);
+    };
+  }, []);
 
   function handleZoomIn() {
     mapRef.current?.getMap().zoomIn({ duration: 200 });
@@ -433,7 +476,10 @@ export default function MapView({
         initialViewState={{ longitude: 72, latitude: 18, zoom: 3 }}
         style={{ width: "100%", height: "100%" }}
         mapStyle={BASE_STYLE}
-        onLoad={() => setMapLoaded(true)}
+        onLoad={() => {
+          stableMapInstanceRef.current = mapRef.current?.getMap() ?? null;
+          setMapLoaded(true);
+        }}
         // Day 36: WebGL clears its drawing buffer immediately after each
         // frame paints by default — getCanvas() would return a blank/
         // garbage buffer at the moment of export capture without this.
