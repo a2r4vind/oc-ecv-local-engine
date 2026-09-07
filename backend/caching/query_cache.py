@@ -27,21 +27,42 @@ from pathlib import Path
 from typing import Any
 from datetime import datetime, timezone
 
-# Day 44 fix: Path(__file__).resolve() inside a PyInstaller --onefile
-# frozen binary resolves to a path INSIDE the bootloader's temp
-# extraction directory (e.g. /tmp/_MEIxxxxxx/), which is a fresh random
-# location on every launch and is not guaranteed to persist after the
-# process exits. Confirmed via lsof + direct inspection on Day 44: the
-# cache was silently living at /tmp/_MEI8jkVn6/cache/query_cache.db
-# rather than backend/cache/query_cache.db, meaning every "verified
-# through the compiled sidecar" caching claim since Day 18 was checking
-# real behavior only WITHIN a single running session — the cache never
-# actually persisted across app restarts in the shipped build.
-# sys.executable is the actual, stable on-disk path of the compiled
-# binary itself (e.g. frontend/src-tauri/binaries/oc-ecv-backend-...),
-# which does not move between launches.
+# Day 44 fix (superseded by Day 47, kept for history): Path(__file__)
+# inside a PyInstaller --onefile frozen binary resolves to the
+# bootloader's temp extraction dir (/tmp/_MEIxxxxxx/) — fresh random
+# path every launch, not persisted after exit. Fixed by anchoring to
+# sys.executable instead.
+#
+# Day 47 fix: sys.executable itself breaks under an AppImage. AppImages
+# mount their contents read-only at a randomized path per launch
+# (/tmp/.mount_XXXXXXX/...), so sys.executable now resolves INSIDE that
+# mount — same "ephemeral random path" problem as Day 44's bug, plus a
+# NEW problem: the mount is read-only, so cache/ can't even be created
+# there. Neither PyInstaller's bootloader path nor the AppImage's own
+# binary path is a valid place for persistent app data — only an
+# OS-standard per-user data directory is stable, writable, and survives
+# both restarts and the app being moved/reinstalled.
+#
+# OC_ECV_DATA_DIR env var overrides everything below — used for testing
+# so cache location can be pinned to a known temp dir without touching
+# the real user data directory.
 if getattr(sys, "frozen", False):
-    DB_PATH = Path(sys.executable).resolve().parent / "cache" / "query_cache.db"
+    _data_dir_override = os.environ.get("OC_ECV_DATA_DIR")
+    if _data_dir_override:
+        _base_dir = Path(_data_dir_override)
+    elif sys.platform.startswith("linux"):
+        _xdg_data_home = os.environ.get("XDG_DATA_HOME")
+        _base_dir = (
+            Path(_xdg_data_home) if _xdg_data_home
+            else Path.home() / ".local" / "share"
+        ) / "oc-ecv-local-engine"
+    else:
+        # Not yet targeted for packaging (MVP scope is Linux/.AppImage
+        # only per the milestone doc) — same per-user-home fallback,
+        # revisit with a proper platform-specific path if macOS/Windows
+        # packaging is ever added post-MVP.
+        _base_dir = Path.home() / ".oc-ecv-local-engine"
+    DB_PATH = _base_dir / "cache" / "query_cache.db"
 else:
     DB_PATH = Path(__file__).resolve().parent.parent / "cache" / "query_cache.db"
 
