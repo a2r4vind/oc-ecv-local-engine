@@ -33,11 +33,16 @@ import ScatterChart from "./components/ScatterChart/ScatterChart";
 import HistoryPanel from "./components/HistoryPanel/HistoryPanel";
 import { ingestFile, type HistoryEntry } from "./services/backendApi";
 import type { NormalizedTimeSeries } from "./utils/timeseries";
+import TopNav, { type TopTab } from "./components/TopNav/TopNav";
+import HomePage from "./components/HomePage/HomePage";
+import AboutPage from "./components/AboutPage/AboutPage";
+import HelpPage from "./components/HelpPage/HelpPage";
 import "./App.css";
  
 type Mode = "stats" | "timeseries" | "histogram" | "scatter" | "history";
 
 function App() {
+  const [activeTopTab, setActiveTopTab] = useState<TopTab>("home");
   const [ingestedFilePath, setIngestedFilePath] = useState<string | null>(null);
   const [ingestedResult, setIngestedResult] = useState<IngestionResult | null>(null);
 
@@ -255,6 +260,8 @@ function App() {
   
   const hasFile = !!ingestedFilePath && availableVariables.length > 0;
   
+  const topNavStatus = statsLoading || rasterLoading ? "RUNNING" : "READY";
+  
   // Phase B: valid date range for the currently loaded file, sourced
   // from IngestionResult.metadata.time_steps (already available, no
   // backend call needed) — shown next to the date fields so the user
@@ -280,8 +287,18 @@ function App() {
   };
 
   return (
-    <main className="container">
-      <h1>OC-ECV Local Engine</h1>
+    <div className="app-root">
+      <TopNav active={activeTopTab} onChange={setActiveTopTab} status={topNavStatus} />
+
+      <div className="page-body">
+        {activeTopTab === "home" && (
+          <HomePage onOpenWorkspace={() => setActiveTopTab("process")} />
+        )}
+        {activeTopTab === "about" && <AboutPage />}
+        {activeTopTab === "help" && <HelpPage />}
+
+        {activeTopTab === "process" && (
+    <main className="container process-container">
 
       {!ingestedFilePath ? (
         <>
@@ -501,6 +518,9 @@ function App() {
         </div>
       )}
     </main>
+        )}
+      </div>
+    </div>
   );
 }
 

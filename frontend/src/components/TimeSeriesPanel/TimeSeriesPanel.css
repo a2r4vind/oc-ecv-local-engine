@@ -15,6 +15,7 @@
   margin: 0 0 1rem;
   max-width: none;
 }
+
 .timeseries-mode-toggle {
   display: flex;
   gap: 1.5rem;
@@ -38,7 +39,6 @@
   color: var(--oc-text-secondary);
   margin: 0 0 0.6rem;
 }
-
 
 .field-group {
   margin-bottom: 1rem;

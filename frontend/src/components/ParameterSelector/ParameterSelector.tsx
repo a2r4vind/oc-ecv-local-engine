@@ -179,19 +179,23 @@ export default function ParameterSelector({
 
   return (
     <form className="parameter-selector" onSubmit={handleSubmit}>
+      <h2>Query</h2>
       <div className="field-group">
         <label htmlFor="variable-select">Variable (ECV)</label>
-        <select
-          id="variable-select"
-          value={variable}
-          onChange={(e) => setVariable(e.target.value)}
-        >
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        <div className="select-wrapper">
+          <select
+            id="variable-select"
+            value={variable}
+            onChange={(e) => setVariable(e.target.value)}
+          >
+            {availableVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <span className="select-arrow" aria-hidden="true" />
+        </div>
       </div>
 
       <fieldset className="bbox-fieldset">

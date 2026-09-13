@@ -1,0 +1,63 @@
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 56px;
+  padding: 0 1.5rem;
+  background: var(--oc-nav-bg);
+  color: var(--oc-nav-text);
+  flex: none;
+}
+
+.top-nav-brand {
+  font-family: var(--oc-font-sans);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #ffffff;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.top-nav-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.top-nav-tab {
+  background: transparent;
+  border: none;
+  border-radius: var(--oc-radius-sm);
+  color: var(--oc-nav-text);
+  font-family: var(--oc-font-sans);
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.03em;
+  padding: 0.5rem 1rem;
+}
+
+.top-nav-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.top-nav-tab.active {
+  background: var(--oc-nav-tab-active-bg);
+  color: #ffffff;
+}
+
+.top-nav-tab:active {
+  background: var(--oc-nav-tab-active-bg);
+}
+
+.top-nav-status {
+  font-family: var(--oc-font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--oc-status-ready-text);
+  background: var(--oc-status-ready-bg);
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}

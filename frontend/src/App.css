@@ -25,6 +25,17 @@
   --oc-error-border: rgba(239, 68, 68, 0.3);
   --oc-success: #15803d;
 
+  --oc-nav-bg: #0d2b52;
+  --oc-nav-tab-active-bg: #1a4a7a;
+  --oc-nav-text: #b9cee5;
+  --oc-status-ready-bg: #163f66;
+  --oc-status-ready-text: #7fd0ff;
+
+  --oc-sidebar-field-bg: #163a5c;
+  --oc-sidebar-accent: #4fa8e8;
+  --oc-run-green: #1e8e3e;
+  --oc-run-green-hover: #187a34;
+
   --oc-radius-sm: 6px;
   --oc-radius-md: 8px;
 
@@ -51,6 +62,24 @@
   flex-direction: column;
   justify-content: center;
   text-align: center;
+}
+ 
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.process-container {
+  flex: 1;
 }
 
 a {
@@ -262,6 +291,9 @@ select {
   min-width: 0;
   max-width: 100%;
   overflow-x: auto;
+  background: var(--oc-nav-bg);
+  border-radius: var(--oc-radius-md);
+  padding: 1.25rem 1.1rem 1.5rem;
 }
 
 .main-area {
@@ -300,6 +332,86 @@ select {
 .mode-tab:active {
   background: transparent;
   color: var(--oc-accent);
+}
+
+/* Sidebar sits on navy now — recolor the mode-tab strip and any panel
+   form dropped inside it (ParameterSelector today; TimeSeriesPanel/
+   HistogramPanel/ScatterPanel likely share the same field-group/
+   fieldset/legend/button convention) so nothing renders as a stray
+   white card against the dark background. */
+.sidebar .mode-tabs {
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+.sidebar .mode-tab {
+  color: var(--oc-nav-text);
+}
+.sidebar .mode-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.sidebar .mode-tab.active {
+  color: #ffffff;
+  border-bottom-color: var(--oc-sidebar-accent);
+}
+
+.sidebar-panel-item .parameter-selector,
+.sidebar-panel-item .timeseries-panel {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.sidebar-panel-item .field-group label,
+.sidebar-panel-item legend {
+  color: var(--oc-nav-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.72rem;
+}
+
+.sidebar-panel-item .bbox-grid label,
+.sidebar-panel-item .date-grid label {
+  color: var(--oc-nav-text);
+}
+
+.sidebar-panel-item fieldset {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.sidebar-panel-item .field-group select,
+.sidebar-panel-item .bbox-grid input,
+.sidebar-panel-item .date-grid input,
+.sidebar-panel-item input,
+.sidebar-panel-item select {
+  background: var(--oc-sidebar-field-bg);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.sidebar-panel-item input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+.sidebar-panel-item input:focus-visible,
+.sidebar-panel-item select:focus-visible {
+  outline-color: var(--oc-sidebar-accent);
+}
+
+.sidebar-panel-item .temporal-note,
+.sidebar-panel-item .valid-range-note {
+  color: var(--oc-nav-text);
+}
+
+.sidebar-panel-item .parameter-selector button[type="submit"] {
+  width: 100%;
+  background: var(--oc-run-green);
+  border-color: var(--oc-run-green);
+  color: #ffffff;
+  font-weight: 700;
+  padding: 0.7rem 1.4rem;
+  margin-top: 0.25rem;
+}
+.sidebar-panel-item .parameter-selector button[type="submit"]:hover:not(:disabled) {
+  background: var(--oc-run-green-hover);
 }
 
 /* Panels (.timeseries-panel / .parameter-selector) already carry their
@@ -350,4 +462,133 @@ select {
 .results-area .error-panel {
   max-width: none;
   margin: 0;
+}
+
+/* --- Stop-gap overrides for TimeSeriesPanel / HistogramPanel / ScatterPanel ---
+   These three panels' own CSS defines select/heading colors independently
+   of ParameterSelector's shared field-group/legend pattern, and is winning
+   the cascade over the sidebar reskin above (likely equal-specificity +
+   later Vite chunk load order). Broad + !important here as an immediate
+   fix; once the three panels' CSS files are shared, this block should be
+   replaced with a leaner rule scoped to their actual classnames. */
+
+.sidebar-panel-item h1,
+.sidebar-panel-item h2,
+.sidebar-panel-item h3,
+.sidebar-panel-item legend,
+.sidebar-panel-item label {
+  color: var(--oc-nav-text) !important;
+}
+
+.sidebar-panel-item input[type="text"],
+.sidebar-panel-item input[type="number"] {
+  background: var(--oc-sidebar-field-bg) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* WebKitGTK ignores background-color on a native <select> unless
+   appearance is overridden first (confirmed via DevTools: computed
+   appearance was `auto` despite our background-color rule being
+   present and not crossed out) — same root-cause family as the Day
+   12-14 date-picker freeze and Day 24 range-slider styling failure.
+   Forcing appearance: none makes it a fully custom-drawn box, at which
+   point background-color is honored; the native dropdown arrow is
+   replaced with a CSS-drawn chevron since appearance: none removes it. */
+.sidebar-panel-item select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-color: var(--oc-sidebar-field-bg) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #b9cee5 50%),
+    linear-gradient(135deg, #b9cee5 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) center,
+    calc(100% - 13px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 2rem;
+}
+
+.sidebar-panel-item select option {
+  background: var(--oc-sidebar-field-bg);
+  color: #ffffff;
+}
+
+/* --- HistoryPanel navy reskin (Step 5) ---
+   HistoryPanel.css defines its own panel chrome independently of the
+   ParameterSelector/TimeSeriesPanel field-group convention — same
+   "own CSS wins the cascade" situation the earlier stop-gap block
+   already fixed for the other three panels. Following that same
+   pattern here rather than rewriting HistoryPanel.css directly, to
+   keep this override centralized in one place per the existing
+   convention in this file. */
+
+.sidebar-panel-item .history-panel {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-panel-item .history-count {
+  color: var(--oc-nav-text);
+}
+
+.sidebar-panel-item .history-entry {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-panel-item .history-entry-main strong {
+  color: #ffffff;
+}
+
+.sidebar-panel-item .history-file-name,
+.sidebar-panel-item .history-entry-detail,
+.sidebar-panel-item .history-entry-meta {
+  color: var(--oc-nav-text);
+}
+
+.sidebar-panel-item .history-entry button {
+  background: var(--oc-sidebar-field-bg);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+.sidebar-panel-item .history-entry button:hover:not(:disabled) {
+  background: var(--oc-sidebar-accent);
+  border-color: var(--oc-sidebar-accent);
+}
+
+/* WebKitGTK on this build rejects background-image specifically on a
+   de-natived <select> (confirmed: appearance:none partially honored —
+   color/background-color/border took effect, but no combination of
+   background-image syntax rendered, ruling out data-URI encoding,
+   external file resolution, and stale HMR cache in turn). Same family
+   as the Day 12-14 date-picker/Day 24 range-slider native-widget
+   limitations — fix is a custom overlay, not more CSS on the widget
+   itself. This decorative arrow sits on top of the select via a
+   sibling span in a relatively-positioned wrapper; pointer-events:none
+   lets clicks pass through to the real select underneath. */
+.select-wrapper {
+  position: relative;
+}
+.select-wrapper select {
+  width: 100%;
+}
+.select-wrapper .select-arrow {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #b9cee5;
+  pointer-events: none;
 }

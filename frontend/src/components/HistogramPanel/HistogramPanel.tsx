@@ -141,17 +141,21 @@ export default function HistogramPanel({
       <h2>Histogram</h2>
       <div className="field-group">
         <label htmlFor="hist-variable-select">Variable (ECV)</label>
-        <select
-          id="hist-variable-select"
-          value={variable}
-          onChange={(e) => setVariable(e.target.value)}
-        >
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        
+        <div className="select-wrapper">
+          <select
+            id="hist-variable-select"
+            value={variable}
+            onChange={(e) => setVariable(e.target.value)}
+          >
+            {availableVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <span className="select-arrow" aria-hidden="true" />
+        </div>
       </div>
       <fieldset className="bbox-fieldset">
         <legend>Bounding Box</legend>

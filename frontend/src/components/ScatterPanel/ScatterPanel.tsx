@@ -23,7 +23,7 @@ interface ScatterPanelProps {
   // Phase C: this panel's bbox as owned by App.tsx's bboxByMode(.scatter).
   bbox?: ParsedBbox | null;
 }
-
+ 
 export default function ScatterPanel({
   filePath,
   availableVariables,
@@ -152,32 +152,40 @@ export default function ScatterPanel({
 
       <div className="field-group">
         <label htmlFor="scatter-x-select">Variable X</label>
-        <select
-          id="scatter-x-select"
-          value={variableX}
-          onChange={(e) => setVariableX(e.target.value)}
-        >
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        
+        <div className="select-wrapper">
+          <select
+            id="scatter-x-select"
+            value={variableX}
+            onChange={(e) => setVariableX(e.target.value)}
+          >
+            {availableVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <span className="select-arrow" aria-hidden="true" />
+        </div>
       </div>
 
       <div className="field-group">
         <label htmlFor="scatter-y-select">Variable Y</label>
-        <select
-          id="scatter-y-select"
-          value={variableY}
-          onChange={(e) => setVariableY(e.target.value)}
-        >
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        
+        <div className="select-wrapper">
+          <select
+            id="scatter-y-select"
+            value={variableY}
+            onChange={(e) => setVariableY(e.target.value)}
+          >
+            {availableVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <span className="select-arrow" aria-hidden="true" />
+        </div>
       </div>
 
       <fieldset className="bbox-fieldset">

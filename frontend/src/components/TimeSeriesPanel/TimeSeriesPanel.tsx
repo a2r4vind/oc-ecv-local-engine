@@ -304,20 +304,22 @@ export default function TimeSeriesPanel({
           directory" instead.
         </p>
       )}
-
       <div className="field-group">
         <label htmlFor="ts-variable-select">Variable (ECV)</label>
-        <select
-          id="ts-variable-select"
-          value={variable}
-          onChange={(e) => setVariable(e.target.value)}
-        >
-          {availableVariables.map((v) => (
-            <option key={v} value={v}>
-              {v}
-            </option>
-          ))}
-        </select>
+        <div className="select-wrapper">
+          <select
+            id="ts-variable-select"
+            value={variable}
+            onChange={(e) => setVariable(e.target.value)}
+          >
+            {availableVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+          <span className="select-arrow" aria-hidden="true" />
+        </div>
       </div>
 
       <fieldset className="bbox-fieldset">
