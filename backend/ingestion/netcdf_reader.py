@@ -16,6 +16,9 @@ import netCDF4
 import xarray as xr
 import numpy as np
 import sys
+import rasterio
+from rasterio.warp import transform_bounds
+from rasterio.errors import RasterioIOError
 
 # Ensure backend/ is on sys.path so `validation` resolves as a sibling
 # package, regardless of whether this script is run directly
@@ -26,7 +29,13 @@ from validation.file_validator import run_validation
 
 KNOWN_ECV_PREFIXES = {
     # Ocean Color & Biogeochemistry
-    "chlorophyll": ["chlor_a", "chl_ocx", "chl_a"],
+    # ESA/Copernicus naming variants (CHL_OC4ME, CHL_NN, ADG443_NN,
+    # TSM_NN) added Day 54, discovered via real Sentinel-3 OLCI GeoTIFF
+    # testing -- first non-NASA-OB.DAAC provider tested in this
+    # project. Matching itself is now case-insensitive (see
+    # identify_ecv_variables/identify_ecv_variables_geotiff below), so
+    # these entries only need to be listed once regardless of case.
+    "chlorophyll": ["chlor_a", "chl_ocx", "chl_a", "chl_oc4me", "chl_nn"],
     "reflectance": ["Rrs_", "Rrs"],
     "cdom": ["cdom_index", "cdom", "adg"],
     "poc": ["poc"],
@@ -40,12 +49,25 @@ KNOWN_ECV_PREFIXES = {
     "sea_ice": ["sea_ice_conc", "sea_ice"],
     # Energy & Air-Sea Interaction
     "par": ["par", "ipar"],
-    "aod": ["aot_", "aot", "angstrom"],
+    "aod": ["aot_", "aot", "angstrom", "a865", "t865"],
 }
+
 
 
 DATA_GROUP_CANDIDATES = ["geophysical_data"]
 NAV_GROUP_CANDIDATES = ["navigation_data"]
+
+# Tier 1 GeoTIFF support (Day 54 prep) -- ingestion + metadata only.
+# Full subsetting/stats/raster-rendering parity with NetCDF is NOT
+# implemented; every downstream module (subsetting.py, statistics.py,
+# raster.py) still assumes an xarray.Dataset with NetCDF-style
+# variables/coords. Deliberate, documented scope limit -- see Day 54
+# handover notes, not an oversight.
+GEOTIFF_EXTENSIONS = {".tif", ".tiff"}
+
+
+def _is_geotiff(file_path: str) -> bool:
+    return Path(file_path).suffix.lower() in GEOTIFF_EXTENSIONS
 
 
 class IngestionError(Exception):
@@ -85,6 +107,9 @@ def _find_data_and_nav_groups(file_path: str) -> tuple[str | None, str | None]:
 
 
 def extract_metadata(file_path: str) -> dict[str, Any]:
+    if _is_geotiff(file_path):
+        return extract_metadata_geotiff(file_path)
+    
     data_group, nav_group = _find_data_and_nav_groups(file_path)
     root_ds = open_dataset(file_path)
 
@@ -156,18 +181,100 @@ def extract_metadata(file_path: str) -> dict[str, Any]:
 
 
 def identify_ecv_variables(file_path: str) -> dict[str, list[str]]:
+    if _is_geotiff(file_path):
+        band_names = extract_metadata(file_path)["variables"]
+        return identify_ecv_variables_geotiff(file_path, band_names)
+    
     data_group, _ = _find_data_and_nav_groups(file_path)
     ds = open_dataset(file_path, group=data_group) if data_group else open_dataset(file_path)
 
     found: dict[str, list[str]] = {category: [] for category in KNOWN_ECV_PREFIXES}
     for var_name in ds.data_vars:
+        var_lower = var_name.lower()
         for category, prefixes in KNOWN_ECV_PREFIXES.items():
-            if any(var_name.startswith(p) or var_name == p for p in prefixes):
+            if any(var_lower.startswith(p.lower()) or var_lower == p.lower() for p in prefixes):
                 found[category].append(var_name)
 
     ds.close()
     return found
 
+def extract_metadata_geotiff(file_path: str) -> dict[str, Any]:
+    """
+    Tier 1 GeoTIFF metadata extraction via rasterio directly (no new
+    dependency -- rasterio has been installed since Day 1). Reprojects
+    bounds to EPSG:4326 if the source CRS differs, since most
+    real-world GeoTIFFs are NOT already lat/lon (commonly UTM or a
+    sensor-native projection).
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise IngestionError(f"File not found: {file_path}")
+
+    try:
+        with rasterio.open(path) as src:
+            width, height, band_count = src.width, src.height, src.count
+            crs = src.crs
+            bounds = src.bounds
+            band_descriptions = list(src.descriptions)
+            dtype = src.dtypes[0] if src.dtypes else None
+            tags = src.tags()
+
+            if crs is None:
+                raise IngestionError(
+                    f"GeoTIFF '{path.name}' has no CRS defined -- cannot determine geographic bounds."
+                )
+
+            if crs.to_epsg() == 4326:
+                lon_min, lat_min, lon_max, lat_max = bounds.left, bounds.bottom, bounds.right, bounds.top
+            else:
+                lon_min, lat_min, lon_max, lat_max = transform_bounds(crs, "EPSG:4326", *bounds)
+    except RasterioIOError as e:
+        raise IngestionError(f"Failed to open GeoTIFF '{path.name}': {e}") from e
+
+    band_names = [
+        band_descriptions[i] if band_descriptions[i] else f"band_{i + 1}"
+        for i in range(band_count)
+    ]
+
+    return {
+        "structure": "geotiff_raster",
+        "global_attrs": dict(tags),
+        "dimensions": {"y": height, "x": width, "band": band_count},
+        "variables": band_names,
+        "coordinates": ["x", "y"],
+        "lat_range": [float(lat_min), float(lat_max)],
+        "lon_range": [float(lon_min), float(lon_max)],
+        "source_crs": str(crs),
+        "dtype": str(dtype),
+    }
+
+
+def identify_ecv_variables_geotiff(file_path: str, band_names: list[str]) -> dict[str, list[str]]:
+    """
+    GeoTIFF bands are frequently generic ("band_1", "band_2") with no
+    descriptive name at all, unlike NetCDF variables -- so band-name
+    matching alone often finds nothing even on a genuine ECV file.
+    Falls back to checking the filename itself against the same known
+    prefixes, attributing ALL bands to that category on a filename hit,
+    rather than leaving a classifiable file with zero classified ECVs.
+    """
+    found: dict[str, list[str]] = {category: [] for category in KNOWN_ECV_PREFIXES}
+
+    for var_name in band_names:
+        var_lower = var_name.lower()
+        for category, prefixes in KNOWN_ECV_PREFIXES.items():
+            if any(var_lower.startswith(p.lower()) or var_lower == p.lower() for p in prefixes):
+                found[category].append(var_name)
+        
+
+    if not any(found.values()):
+        filename = Path(file_path).stem.lower()
+        for category, prefixes in KNOWN_ECV_PREFIXES.items():
+            if any(p.lower().rstrip("_") in filename for p in prefixes):
+                found[category] = list(band_names)
+                break
+
+    return found
 
 def parse_file(file_path: str) -> dict[str, Any]:
     """
