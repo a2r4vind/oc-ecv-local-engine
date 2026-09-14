@@ -224,6 +224,21 @@ case-insensitively.
 - **Native `<select>` open-dropdown popup list** renders with default OS
   styling rather than the app's navy theme — a WebKitGTK popup-surface
   theming limitation, accepted as known/cosmetic.
+- **`npm audit` flags 3 critical severity vulnerabilities** (all one advisory,
+  GHSA-jrc7-96c5-q579 — a MapLibre GL JS XSS sanitizer bypass — appearing
+  three times because `plotly.js` bundles its own copy of `maplibre-gl`).
+  Investigated directly: the vulnerable code path (`Popup.setHTML()`/
+  `setText()`, HTML-content `Marker`s) is never invoked anywhere in this
+  codebase — `MapView.tsx` uses deck.gl's independent tooltip system,
+  `BboxDrawTool.ts` uses terra-draw's feature store, and no Plotly map-type
+  traces are used. Confirmed non-exploitable given this app's actual usage;
+  not remediated via `npm audit fix --force` since that would force a
+  breaking `plotly.js` upgrade for zero reachable risk. See
+  `docs/Day_56_Summary_Report.md`.
+- **`/diagnostics` reports `xarray` version as `"999"`** inside the frozen
+  sidecar binary, despite `xarray` functioning correctly (confirmed via
+  live `/ingest` calls) — likely a missing `--collect-metadata xarray`
+  flag in the PyInstaller build command. Cosmetic only.
 
 ### Environment-specific quirks (WSLg / WebKitGTK)
 
