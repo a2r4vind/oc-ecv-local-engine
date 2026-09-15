@@ -89,6 +89,33 @@ oc_ecv_local_engine/
 - Rust toolchain (`rustup`) — required by Tauri
 - `xdg-utils` — required for the Tauri AppImage bundler's post-build step
 
+## System Requirements (Running the Packaged App)
+
+**Minimum: glibc ≥ 2.39 on the target machine (e.g. Ubuntu 24.04 or
+later).** All packaged artifacts (`.AppImage`, `.deb`, `.rpm`) are built on
+Ubuntu 24.04 and dynamically link against its glibc/GTK/WebKitGTK stack at
+build time. This was confirmed directly, not assumed: both the `.deb` and
+the `.AppImage` were tested on an Ubuntu 22.04 machine (glibc 2.35) and
+both failed to launch, with `GLIBC_2.38`/`GLIBC_2.39 not found` errors
+against the core binary and against essentially every bundled GTK/WebKit
+dependency (`libgdk`, `libcairo`, `libwebkit2gtk`, `libglib`, and others).
+
+This is not fixable by install flags, `--appimage-extract-and-run`, or any
+runtime workaround — glibc is intentionally excluded from AppImage
+bundling as a base-OS-level dependency, and a genuinely older-distro-
+compatible build would require compiling the entire toolchain (Tauri +
+PyInstaller sidecar) on an older base system such as Ubuntu 22.04. That is
+out of scope before the September 17, 2026 deadline and is recorded here
+as a confirmed, root-caused limitation rather than an untested assumption.
+See `docs/Day_56_Summary_Report.md` for the investigation.
+
+**Practical implication:** if the machine running this app is Ubuntu
+24.04 or any distro with glibc ≥ 2.39, all three package formats work as
+expected. On older systems, none of the three packaged artifacts will
+launch — the only current workaround is building/running from source
+directly on that system (see Local Development Setup below), which
+carries its own environment-setup cost (conda/geospatial stack).
+
 ## Local Development Setup
 
 ### 1. Python backend environment
@@ -180,14 +207,15 @@ cd frontend
 npm run tauri build
 ```
 
-Produces a portable `.AppImage` (and `.deb`/`.rpm`, not independently
-verified — see Known Limitations) at:
+Produces a portable `.AppImage` (and `.deb`/`.rpm`) at:
 ```
 frontend/src-tauri/target/release/bundle/appimage/
 ```
 
-Fully self-contained — no Python, Node, or Rust installation required on
-the target machine.
+No Python, Node, or Rust installation is required on the target machine —
+but see **System Requirements** above: the target machine's glibc version
+does matter, and packages built on Ubuntu 24.04 will not run on
+significantly older distros regardless of format.
 
 ## Supported Data Formats & Scope
 
@@ -216,9 +244,13 @@ case-insensitively.
   parameters — not yet root-caused.
 - **Quality flags** are supported by the backend (`/stats` accepts a
   `quality_flags` parameter) but not yet exposed as a UI control.
-- **`.deb`/`.rpm` packages** are produced by the Tauri bundler but have not
-  been independently installed/verified on a clean system — only the
-  `.AppImage` has been verified this way.
+- **Packaged artifacts require glibc ≥ 2.39** (e.g. Ubuntu 24.04+) on the
+  target machine. All three package formats (`.AppImage`, `.deb`, `.rpm`)
+  fail to launch on older systems (confirmed on Ubuntu 22.04) — see
+  **System Requirements** above for full detail. This supersedes the
+  earlier, narrower "install-unverified" note for `.deb`/`.rpm`: the
+  actual finding is a glibc version constraint that affects every package
+  format equally, not something specific to one installer type.
 - **Bounding-box draw cursor** shows a cosmetic glitch under WSLg/Zink
   software rendering; draw functionality itself is unaffected.
 - **Native `<select>` open-dropdown popup list** renders with default OS
