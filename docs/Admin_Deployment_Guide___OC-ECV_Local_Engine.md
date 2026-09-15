@@ -23,19 +23,61 @@ The build produces three Linux package formats from a single `tauri build` invoc
 
 | Format | Status |
 |---|---|
-| `.AppImage` | **Primary, fully verified distribution format.** Portable, no installation required. This release's complete end-to-end regression (packaging, cache persistence, concurrency, all UI tabs, exports) was performed against this format specifically. |
-| `.deb` | Produced as a build artifact. Has not been through the same dedicated verification pass as the AppImage this release — treat as unverified/best-effort if distributing via this channel. |
-| `.rpm` | Same status as `.deb` — produced, not independently verified this release. |
+| `.AppImage` | Functionally verified via full end-to-end regression (packaging, cache persistence, concurrency, all UI tabs, exports) on the Ubuntu 24.04 build machine. **Note:** this verification does not extend to older target systems — see the glibc constraint below, which affects this format equally to the others. |
+| `.deb` | Produced as a build artifact. Installs cleanly via `apt` on matching or newer systems; confirmed to fail on Ubuntu 22.04 (see Section 3). |
+| `.rpm` | Produced as a build artifact. Not independently install-tested this release (no Red Hat-family test system available), but expected to carry the same glibc constraint as the other two formats, since all three are compiled by the same toolchain on the same build machine. |
 
-**Recommendation:** distribute the `.AppImage` as the primary supported artifact until `.deb`/`.rpm` receive their own dedicated verification pass.
+**Important correction to prior guidance:** earlier drafts of this document
+recommended the `.AppImage` as the "safer" distribution choice relative to
+`.deb`/`.rpm` on the basis of verification depth alone. Direct testing has
+since shown this framing to be incomplete: **all three formats share an
+identical, confirmed glibc 2.39+ requirement** (Section 3) inherited from
+the Ubuntu 24.04 build environment, not something specific to one package
+type. A target system too old to run the `.deb` is equally unable to run
+the `.AppImage` — verification level does not change this. Package format
+choice should be based on the target system's actual package management
+preference, not on an assumption that AppImage is inherently more portable
+in this specific case.
+
+**Recommendation:** confirm the target machine's glibc version (Section 3)
+before choosing a distribution format — this is now the primary
+deployment gate, ahead of format preference.
 
 ---
 
 ## 3. System Requirements (Deployment Target)
 
-- Linux x86_64 (tested: Ubuntu 24.04, WSL2/Ubuntu)
+- Linux x86_64, **glibc ≥ 2.39** (e.g. Ubuntu 24.04 or later)
 - No Python, Node.js, or other runtime installation required on the target machine — the backend is a fully self-contained compiled binary bundled inside the AppImage
 - Recommended: 4GB+ RAM, especially for large multi-gigabyte NetCDF files or heavy multi-tab usage
+
+**glibc requirement — confirmed, not assumed:** all three package formats
+are built on Ubuntu 24.04 and dynamically link against its glibc/GTK/
+WebKitGTK stack at build time. Direct testing on an Ubuntu 22.04 machine
+(glibc 2.35) produced launch failures for both the `.deb` and the
+`.AppImage`, with errors of the form:
+```
+oc-ecv-local_engine: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found (required by oc-ecv-local_engine)
+```
+and, for the AppImage specifically, cascading identical errors against
+nearly every bundled GTK/WebKitGTK library (`libgdk`, `libcairo`,
+`libwebkit2gtk`, `libglib`, and others) — confirming the constraint is
+systemic to the build environment, not a single missing dependency.
+`--appimage-extract-and-run` and other extraction flags do not work
+around this; glibc is intentionally excluded from AppImage bundling as a
+base-OS-level dependency.
+
+**To check a target machine's glibc version before deployment:**
+```bash
+ldd --version
+```
+
+**Remediation path (not performed this release):** producing artifacts
+compatible with older distributions requires compiling the full toolchain
+(Tauri build + PyInstaller sidecar) on an equivalently older base system,
+e.g. Ubuntu 22.04, and re-running the full verification pass described in
+Section 7. This is a non-trivial rebuild, not a configuration change, and
+is out of scope for the current MVP release.
 
 ---
 
@@ -46,7 +88,17 @@ chmod +x oc-ecv-local_engine_0.1.0_amd64.AppImage
 ./oc-ecv-local_engine_0.1.0_amd64.AppImage
 ```
 
-No further setup is required. The bundled Python backend extracts to a temporary, randomized mount path on each launch (`/tmp/.mount_XXXXXXX/...`, standard AppImage behavior) and is torn down cleanly on exit.
+No further setup is required, provided the target system meets the glibc
+requirement in Section 3. The bundled Python backend extracts to a
+temporary, randomized mount path on each launch (`/tmp/.mount_XXXXXXX/...`,
+standard AppImage behavior) and is torn down cleanly on exit.
+
+For `.deb` installation, prefer `apt` over raw `dpkg -i` so missing
+runtime dependencies (e.g. `libwebkit2gtk-4.1-0`) are resolved
+automatically:
+```bash
+sudo apt install ./oc-ecv-local_engine_0.1.0_amd64.deb
+```
 
 ---
 
@@ -134,6 +186,7 @@ npm run tauri build
 2. Verify again against the actual packaged AppImage output — packaged-path behavior has previously differed from both source and raw-compiled-binary behavior.
 3. Verify across a **full application restart**, not just repeated calls within one running session — some failure modes only appear across restarts.
 4. Run **repeated trials (10-20+)**, not a single pass, for anything concurrency- or timing-sensitive.
+5. **Note added this release:** the build machine's own OS/glibc version is itself part of what must be verified against — a clean build and a clean install-and-launch on the build machine does not confirm behavior on any other target system's OS version (see Section 3).
 
 ---
 
@@ -148,7 +201,8 @@ npm run tauri build
 | 5 | Quality flag (cloud/land/glint) filtering | Backend fully supports this; not yet exposed in the parameter-selection UI. |
 | 6 | Bounding-box draw tool cursor doesn't visually change to a crosshair | Cosmetic only (known Linux/WebKitGTK software-rendering rendering quirk under certain graphics configurations); draw functionality itself is unaffected. |
 | 7 | `scattergl` (WebGL scatter plot) trace recreates its rendering context on every new scatter query | Confirmed intrinsic to the Plotly.js/regl library, not a bug in this application's code. Under software-rendered graphics environments, this can contribute to memory growth under heavy sustained scatter-tab usage (15+ consecutive queries). Application remains functional throughout; no crashes observed in testing. |
-| 8 | `.deb` / `.rpm` packages | Produced by the build but not independently verified this release (see Section 2) |
+| 8 | **All packaged formats require glibc ≥ 2.39** (e.g. Ubuntu 24.04+) on the target machine | **Confirmed via direct testing** on Ubuntu 22.04 (glibc 2.35): both `.deb` and `.AppImage` fail to launch with `GLIBC_2.38`/`GLIBC_2.39 not found` errors. This affects all three formats equally — see Sections 2 and 3. No workaround exists short of rebuilding the full toolchain on an older base system (out of scope this release). Supersedes the previous framing of `.deb`/`.rpm` as merely "less verified" than `.AppImage`; the real constraint is the build machine's glibc version, not format choice. |
+| 9 | `npm audit` reports 3 critical severity findings (frontend dependencies) | All three collapse to one advisory (GHSA-jrc7-96c5-q579, a MapLibre GL JS XSS sanitizer bypass), reachable via `maplibre-gl` directly and via a bundled copy inside `plotly.js`/`react-plotly.js`. Investigated directly via source review: the vulnerable API surface (`Popup.setHTML()`/`setText()`, HTML-content `Marker`s) is never invoked anywhere in this codebase's map or chart components. Confirmed non-exploitable given actual usage; not remediated via `npm audit fix --force` since that would force a breaking `plotly.js` upgrade for no reduction in real risk. |
 
 ---
 
@@ -156,7 +210,8 @@ npm run tauri build
 
 When investigating a reported issue, gather in order:
 
-1. **`/diagnostics` output** — confirms the sidecar's bundled dependencies are intact.
-2. **Whether the issue reproduces on a fresh cache** — relaunch with `OC_ECV_DATA_DIR` pointed at an empty temp directory (Section 5) to rule out a stale/corrupted cache entry.
-3. **The exact file, variable, bounding box, and date range** used, plus whether the source file is a single-pass swath product or a multi-time-step gridded product — many "no data" reports trace back to genuinely sparse valid data (cloud cover, sun glint) in a specific real-world pass rather than an application defect.
-4. **Whether the issue reproduces after a full application restart** — some classes of bugs in this project have historically only manifested across restarts, not within a single session.
+1. **Confirm the target machine's glibc version** (`ldd --version`) if the report is "the app won't launch at all" rather than a functional/data issue — this is now the first thing to rule out, given the confirmed glibc ≥ 2.39 requirement (Section 3). A launch failure on a system below this version is expected behavior, not a new bug.
+2. **`/diagnostics` output** — confirms the sidecar's bundled dependencies are intact (only reachable once the app successfully launches).
+3. **Whether the issue reproduces on a fresh cache** — relaunch with `OC_ECV_DATA_DIR` pointed at an empty temp directory (Section 5) to rule out a stale/corrupted cache entry.
+4. **The exact file, variable, bounding box, and date range** used, plus whether the source file is a single-pass swath product or a multi-time-step gridded product — many "no data" reports trace back to genuinely sparse valid data (cloud cover, sun glint) in a specific real-world pass rather than an application defect.
+5. **Whether the issue reproduces after a full application restart** — some classes of bugs in this project have historically only manifested across restarts, not within a single session.

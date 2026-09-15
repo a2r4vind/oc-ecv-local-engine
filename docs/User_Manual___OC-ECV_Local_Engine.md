@@ -15,9 +15,18 @@ Everything runs on your own machine. No files are uploaded anywhere, and no inte
 
 ## 2. System Requirements
 
-- Linux (tested on Ubuntu 24.04 and WSL2/Ubuntu)
+- Linux, **glibc version 2.39 or later** (e.g. Ubuntu 24.04 or newer). The
+  application will fail to launch on older systems — see the note in
+  Section 3 and item in Section 10 for detail.
 - ~500MB free disk space for the application itself
 - Additional disk space for your data files and local query cache (grows over time with usage — see Section 8)
+
+**Not sure what glibc version your system has?** Run this in a terminal:
+```bash
+ldd --version
+```
+The first line shows your glibc version. If it's below 2.39, the packaged
+application will not run on this machine (see Section 10).
 
 ---
 
@@ -37,7 +46,9 @@ The application is distributed as a standalone `.AppImage` file — no system in
 
 The application window should open within a few seconds. A local backend process starts automatically in the background — you do not need to start or manage it separately.
 
-> **Note:** `.deb` and `.rpm` installer packages are also produced alongside the AppImage during builds, for users who prefer a system package manager. The AppImage is the primary, fully tested distribution format for this release.
+> **Note:** `.deb` and `.rpm` installer packages are also produced alongside the AppImage during builds, for users who prefer a system package manager. All three formats (`.AppImage`, `.deb`, `.rpm`) were built on Ubuntu 24.04 and require glibc 2.39+ on the machine running them — see Section 2. This is not specific to one package format; a system too old for the AppImage will also be too old for `.deb`/`.rpm`.
+
+> **If the app fails to launch with an error mentioning `GLIBC_2.38` or `GLIBC_2.39` not found:** your system's glibc version is older than what this build requires. This is a known limitation (Section 10), not a corrupted download — redownloading or re-extracting will not fix it. The application currently requires Ubuntu 24.04 or an equivalently recent Linux distribution.
 
 ---
 
@@ -126,6 +137,13 @@ The application maintains a local cache of previously computed query results to 
 
 ## 10. Known Limitations
 
+- **Minimum system requirement: glibc 2.39+ (e.g. Ubuntu 24.04 or later).**
+  Confirmed by direct testing: the application (in all three package
+  forms — `.AppImage`, `.deb`, `.rpm`) fails to launch on Ubuntu 22.04 and
+  similarly-aged systems with errors referencing `GLIBC_2.38`/`GLIBC_2.39
+  not found`. There is currently no workaround for older systems other
+  than upgrading the host OS. See Section 2 for how to check your
+  system's glibc version.
 - **Bounding-box draw tool cursor:** when the draw tool is active, the mouse cursor does not visually change to a crosshair. The tool still works correctly — click-and-drag draws the box as expected. This is a cosmetic rendering quirk in some Linux desktop environments, not a functional issue.
 - **Quality flag filtering** (cloud/land/glint masking) is supported by the underlying engine but not yet exposed as a UI control in this release.
 
