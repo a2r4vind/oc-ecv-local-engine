@@ -93,16 +93,33 @@ def encode_bitmap_png(
     range (not a fixed global scale, since every query's range differs).
     Alpha = 0 for NaN/masked pixels (transparent), 255 for valid data.
     """
-    if values.ndim == 3:
-        # A time dimension is still present (no single-day filter was
-        # applied, or multiple days matched). Day 23 renders one static
-        # snapshot, not a time-animated layer — take the first time step
-        # explicitly rather than silently averaging away real temporal
-        # variation. Time-series animation is a natural future milestone,
-        # not in scope here.
-        values = values[0]
+    if values.ndim > 2:
+        # Collapse down to a plain 2D (lat, lon) array before rendering.
+        # Two real cases seen in this project:
+        #   - ndim==3 with a genuine multi-step time axis (e.g. the
+        #     synthetic flat-grid fixture's 3 time steps) -- Day 23's
+        #     original behavior: take the first time step explicitly
+        #     rather than silently averaging away real temporal
+        #     variation. Time-series animation is a future milestone,
+        #     not in scope here.
+        #   - extra SINGLETON leading dims beyond (lat, lon) -- e.g. a
+        #     product carrying Time=1/Depth=1 axes (OCM-3 8-day
+        #     composite) that aren't a real time series at all. These
+        #     are squeezed away directly; the last two axes (assumed
+        #     lat, lon) are never touched.
+        leading_shape = values.shape[:-2]
+        if all(d == 1 for d in leading_shape):
+            values = values.reshape(values.shape[-2:])
+        elif values.ndim == 3:
+            values = values[0]
+        else:
+            raise RasterError(
+                f"Cannot render a {values.ndim}D array with non-singleton "
+                f"leading dimensions {leading_shape} as a 2D raster"
+            )
 
     values = _downsample_2d(values, MAX_RASTER_DIM)
+    
 
     valid_mask = ~np.isnan(values)
     if not valid_mask.any():
