@@ -35,7 +35,7 @@ KNOWN_ECV_PREFIXES = {
     # project. Matching itself is now case-insensitive (see
     # identify_ecv_variables/identify_ecv_variables_geotiff below), so
     # these entries only need to be listed once regardless of case.
-    "chlorophyll": ["chlor_a", "chl_ocx", "chl_a", "chl_oc4me", "chl_nn"],
+    "chlorophyll": ["chlor_a", "chl_ocx", "chl_a", "chl_oc4me", "chl_nn", "cl-a", "chl"],
     "reflectance": ["Rrs_", "Rrs"],
     "cdom": ["cdom_index", "cdom", "adg"],
     "poc": ["poc"],
@@ -143,16 +143,27 @@ def extract_metadata(file_path: str) -> dict[str, Any]:
                 break
         nav_ds.close()
     else:
-        for lat_name in ("lat", "latitude"):
-            if lat_name in root_ds.coords:
-                lat_vals = root_ds.coords[lat_name].values
-                metadata["lat_range"] = [float(lat_vals.min()), float(lat_vals.max())]
-                break
-        for lon_name in ("lon", "longitude"):
-            if lon_name in root_ds.coords:
-                lon_vals = root_ds.coords[lon_name].values
-                metadata["lon_range"] = [float(lon_vals.min()), float(lon_vals.max())]
-                break
+        lat_coord = next((c for c in root_ds.coords if c.lower() in ("lat", "latitude")), None)
+        if lat_coord is not None:
+            lat_vals = root_ds.coords[lat_coord].values
+            # Some regular-grid products' coordinate arrays overshoot the
+            # physical range by a fraction of a degree (float32 grid-step
+            # rounding, e.g. 90.00015 instead of exactly 90) -- not real
+            # data past the pole/antimeridian, just construction noise.
+            # Clip the reported range (not the per-pixel data) so this
+            # doesn't trip a false LAT/LON_OUT_OF_RANGE validation error.
+            metadata["lat_range"] = [
+                float(np.clip(lat_vals.min(), -90.0, 90.0)),
+                float(np.clip(lat_vals.max(), -90.0, 90.0)),
+            ]
+        lon_coord = next((c for c in root_ds.coords if c.lower() in ("lon", "longitude")), None)
+        if lon_coord is not None:
+            lon_vals = root_ds.coords[lon_coord].values
+            metadata["lon_range"] = [
+                float(np.clip(lon_vals.min(), -180.0, 180.0)),
+                float(np.clip(lon_vals.max(), -180.0, 180.0)),
+            ]
+        
 
     if "lat_range" not in metadata and "geospatial_lat_min" in root_ds.attrs:
         metadata["lat_range"] = [
