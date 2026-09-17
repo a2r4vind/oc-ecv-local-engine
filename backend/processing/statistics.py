@@ -158,11 +158,12 @@ def _get_lat_lon_names(ds: xr.Dataset) -> tuple[str, str]:
     works regardless of whether lat/lon are registered as dimension
     coordinates or plain variables.
     """
-    lat_name = "lat" if "lat" in ds.variables else ("latitude" if "latitude" in ds.variables else None)
-    lon_name = "lon" if "lon" in ds.variables else ("longitude" if "longitude" in ds.variables else None)
+    lat_name = next((v for v in ds.variables if v.lower() in ("lat", "latitude")), None)
+    lon_name = next((v for v in ds.variables if v.lower() in ("lon", "longitude")), None)
     if lat_name is None or lon_name is None:
-        raise StatisticsError("Could not find lat/lon coordinates (checked 'lat'/'lon' and 'latitude'/'longitude')")
+        raise StatisticsError("Could not find lat/lon coordinates (checked 'lat'/'lon' and 'latitude'/'longitude', case-insensitive)")
     return lat_name, lon_name
+    
 
 def _compute_flat_grid_stats(
     ds: xr.Dataset,
@@ -380,13 +381,6 @@ def _get_subsetted_data(
             "lon_coords": None,
             "time_coords": None,
         }
-    return {
-        "values": result,
-        "structure_type": structure_type,
-        "lat_coords": None,
-        "lon_coords": None,
-        "time_coords": None,
-    }
     
 
 def compute_regional_stats(
