@@ -71,6 +71,10 @@ function App() {
   const [rasterError, setRasterError] = useState<string | null>(null);
   const [colormap, setColormap] = useState<ColormapName>("viridis");
   const [opacity, setOpacity] = useState(1);
+  // Mentor item #1: 0 = continuous gradient (default, unchanged
+  // behavior); >=2 quantizes the colormap into that many discrete bands
+  // across both the map raster and the legend.
+  const [colorSteps, setColorSteps] = useState(0);
   const [queriedVariable, setQueriedVariable] = useState<string | null>(null);
   // Day 37: exact query object last submitted via "Run Query" — raw
   // export reuses this rather than reading the form's current field
@@ -413,7 +417,23 @@ function App() {
                     </option>
                   ))}
                 </select>
-
+                
+                <label htmlFor="color-steps-input">Steps:</label>
+                <input
+                  id="color-steps-input"
+                  type="number"
+                  min={0}
+                  max={20}
+                  step={1}
+                  value={colorSteps}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setColorSteps(Number.isFinite(v) ? Math.max(0, Math.min(20, v)) : 0);
+                  }}
+                  className="color-steps-input"
+                  title="0 = continuous gradient; 2-20 = discrete color bands"
+                />
+                
                 <label htmlFor="opacity-slider">Opacity:</label>
                 <OpacitySlider
                   value={Math.round(opacity * 100)}
@@ -439,7 +459,7 @@ function App() {
                 )}
               </div>
             )}
-
+ 
             <MapView
               bbox={bboxByMode[activeMode]}
               onBboxChange={setBboxForMode(activeMode)}
@@ -458,6 +478,7 @@ function App() {
               colormap={colormap}
               opacity={opacity}
               variable={queriedVariable ?? ""}
+              steps={colorSteps}
             />
             {activeMode === "stats" && rasterResult && (
               <ColorLegend
@@ -465,6 +486,7 @@ function App() {
                 valueMin={rasterResult.valueMin}
                 valueMax={rasterResult.valueMax}
                 variable={queriedVariable ?? undefined}
+                steps={colorSteps}
               />
             )}
 
@@ -483,16 +505,43 @@ function App() {
                         {statsResult.total_pixel_count} (
                         {((statsResult.valid_fraction ?? 0) * 100).toFixed(1)}%)
                       </p>
+                      
                       {statsResult.mean !== null && statsResult.mean !== undefined ? (
                         <>
                           <p><strong>Mean:</strong> {statsResult.mean.toFixed(4)}</p>
                           <p><strong>Min:</strong> {statsResult.min?.toFixed(4)}</p>
                           <p><strong>Max:</strong> {statsResult.max?.toFixed(4)}</p>
                           <p><strong>Std Dev:</strong> {statsResult.std?.toFixed(4)}</p>
+                          <p><strong>Median:</strong> {statsResult.median?.toFixed(4)}</p>
+                          <p>
+                            <strong>Geometric Mean:</strong>{" "}
+                            {statsResult.geometric_mean !== null && statsResult.geometric_mean !== undefined
+                              ? statsResult.geometric_mean.toFixed(4)
+                              : "n/a (non-positive values present)"}
+                          </p>
+                          <p>
+                            <strong>Percentiles (P25 / P75):</strong> {statsResult.p25?.toFixed(4)} /{" "}
+                            {statsResult.p75?.toFixed(4)}
+                          </p>
+                          <p><strong>Inter Quartile Range (IQR):</strong> {statsResult.iqr?.toFixed(4)}</p>
+                          <p>
+                            <strong>Skewness:</strong>{" "}
+                            {statsResult.skewness !== null && statsResult.skewness !== undefined
+                              ? statsResult.skewness.toFixed(4)
+                              : "n/a (constant region)"}
+                          </p>
+                          <p>
+                            <strong>Coefficient of Variation (CV):</strong>{" "}
+                            {statsResult.cv !== null && statsResult.cv !== undefined
+                              ? statsResult.cv.toFixed(4)
+                              : "n/a (mean = 0)"}
+                          </p>
                         </>
                       ) : (
                         <p>No valid pixels in this region — statistics unavailable.</p>
                       )}
+                      
+                      
                     </div>
                   )}
                 </>

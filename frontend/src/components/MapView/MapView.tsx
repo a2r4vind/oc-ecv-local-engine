@@ -55,6 +55,8 @@ interface MapViewProps {
   rasterResult: RasterResult | null;
   colormap: ColormapName;
   opacity: number;
+  // Mentor item #1: 0 = continuous gradient, >=2 = discrete color bands.
+  steps: number;
   // Day 30: current query's variable name, shown in map hover tooltips.
   variable: string;
 }
@@ -96,6 +98,7 @@ export default function MapView({
   rasterResult,
   colormap,
   opacity,
+  steps,
   variable,
 }: MapViewProps) {
   const mapRef = useRef<MapRef | null>(null);
@@ -117,6 +120,9 @@ export default function MapView({
   // Phase C state
   const [activeTool, setActiveTool] = useState<MapTool>("pan");
   const [graticuleOn, setGraticuleOn] = useState(false);
+  // Mentor item #2: null = auto ("nice step" computation unchanged),
+  // otherwise a manual degree spacing set via the toolbar.
+  const [graticuleStepDeg, setGraticuleStepDeg] = useState<number | null>(null);
   const drawToolRef = useRef<BboxDrawTool | null>(null);
   // Avoids a stale closure over onBboxChange inside the draw-tool's
   // subscription, which is only set up once (on mapLoaded), not on every
@@ -259,12 +265,16 @@ export default function MapView({
 
     const update = () => {
       const b = maplibreMap.getBounds();
-      addOrUpdateGraticule(maplibreMap, {
-        north: b.getNorth(),
-        south: b.getSouth(),
-        east: b.getEast(),
-        west: b.getWest(),
-      });
+      addOrUpdateGraticule(
+        maplibreMap,
+        {
+          north: b.getNorth(),
+          south: b.getSouth(),
+          east: b.getEast(),
+          west: b.getWest(),
+        },
+        graticuleStepDeg
+      );
     };
     update();
     maplibreMap.on("moveend", update);
@@ -272,7 +282,7 @@ export default function MapView({
       maplibreMap.off("moveend", update);
       removeGraticule(maplibreMap);
     };
-  }, [graticuleOn, mapLoaded]);
+  }, [graticuleOn, mapLoaded, graticuleStepDeg]);
   
   // Day 45: explicit WebGL disposal on MapView unmount. Deliberately
   // declared LAST among this component's effects — React runs multiple
@@ -345,8 +355,8 @@ export default function MapView({
 
   const recoloredCanvas = useMemo(() => {
     if (!rasterResult || rasterResult.type !== "bitmap") return null;
-    return recolorBitmap(rasterResult.imageBitmap, colormap);
-  }, [rasterResult, colormap]);
+    return recolorBitmap(rasterResult.imageBitmap, colormap, steps);
+  }, [rasterResult, colormap, steps]);
   
   // Day 30: decoded raw (denormalized) values, separate from the
   // recolored display canvas above. Colormap-independent — only
@@ -370,7 +380,7 @@ export default function MapView({
     for (let i = 0; i < pointCount; i++) {
       positions[i * 2] = lon[i];
       positions[i * 2 + 1] = lat[i];
-      const [r, g, b] = getColor(colormap, value[i]);
+      const [r, g, b] = getColor(colormap, value[i], steps);
       colors[i * 4] = r;
       colors[i * 4 + 1] = g;
       colors[i * 4 + 2] = b;
@@ -378,7 +388,7 @@ export default function MapView({
       rawValues[i] = valueMin + value[i] * (valueMax - valueMin);
     }
     return { positions, colors, rawValues, pointCount };
-  }, [rasterResult, colormap]);
+  }, [rasterResult, colormap, steps]);
   
   // Day 30: deck.gl hover tooltip, handling the two structurally
   // different layer types separately.
@@ -468,7 +478,7 @@ export default function MapView({
   // that rendering directly on the MapLibre map, since it's the
   // interactive/editable one as of Phase C. Rendering both would show two
   // overlapping rectangles.
-
+ 
   return (
     <div className="map-view" ref={containerRef}>
       <Map
@@ -500,6 +510,8 @@ export default function MapView({
           onPan={handlePan}
           graticuleOn={graticuleOn}
           onToggleGraticule={() => setGraticuleOn((v) => !v)}
+          graticuleStepDeg={graticuleStepDeg}
+          onGraticuleStepChange={setGraticuleStepDeg}
         />
       </div>
       <div className="map-view-export-overlay">
