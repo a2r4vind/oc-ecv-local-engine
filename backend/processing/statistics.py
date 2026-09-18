@@ -65,6 +65,23 @@ def compute_statistics(values: np.ndarray) -> dict[str, Any]:
     Generic statistics computation over any array — the core numeric
     building block, independent of how the array was produced (bbox
     subset, temporal slice, masked, or raw).
+
+    Mentor item #3 (additive): adds median, geometric mean, P25/P75,
+    IQR, skewness, and CV alongside the original six fields, which are
+    left completely unchanged in both meaning and computation.
+
+    - geometric_mean: domain-standard for chlorophyll-a in ocean color
+      literature (chl-a is classically log-normal — matches the heavy
+      right-skew already observed in real Oceansat-3 data). Undefined
+      for any sample containing a non-positive value; guarded rather
+      than assumed, even though ECV concentrations are physically
+      positive.
+    - skewness: Fisher-Pearson third standardized moment, population
+      convention (ddof=0, consistent with the existing `std` above).
+      Computed with plain NumPy rather than scipy.stats.skew, since
+      scipy is not a project dependency. Undefined (None) when std==0
+      (a constant-valued region has no skew).
+    - cv: std/mean, undefined (None) when mean==0.
     """
     total = int(values.size)
     valid_mask = ~np.isnan(values)
@@ -79,17 +96,48 @@ def compute_statistics(values: np.ndarray) -> dict[str, Any]:
             "min": None,
             "max": None,
             "std": None,
+            "median": None,
+            "geometric_mean": None,
+            "p25": None,
+            "p75": None,
+            "iqr": None,
+            "skewness": None,
+            "cv": None,
         }
 
     valid_values = values[valid_mask]
+    mean = float(np.mean(valid_values))
+    std = float(np.std(valid_values))
+    p25 = float(np.percentile(valid_values, 25))
+    p75 = float(np.percentile(valid_values, 75))
+
+    geometric_mean = (
+        float(np.exp(np.mean(np.log(valid_values))))
+        if np.all(valid_values > 0)
+        else None
+    )
+    skewness = (
+        float(np.mean(((valid_values - mean) / std) ** 3))
+        if std > 0
+        else None
+    )
+    cv = float(std / mean) if mean != 0 else None
+
     return {
         "total_pixel_count": total,
         "valid_pixel_count": valid_count,
         "valid_fraction": round(valid_count / total, 4),
-        "mean": float(np.mean(valid_values)),
+        "mean": mean,
         "min": float(np.min(valid_values)),
         "max": float(np.max(valid_values)),
-        "std": float(np.std(valid_values)),
+        "std": std,
+        "median": float(np.median(valid_values)),
+        "geometric_mean": geometric_mean,
+        "p25": p25,
+        "p75": p75,
+        "iqr": float(p75 - p25),
+        "skewness": skewness,
+        "cv": cv,
     }
 
 def _apply_valid_range_mask(da: xr.DataArray, values: np.ndarray) -> np.ndarray:

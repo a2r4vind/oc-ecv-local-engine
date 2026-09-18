@@ -36,6 +36,18 @@ export interface StatsResult {
   min?: number | null;
   max?: number | null;
   std?: number | null;
+  // Mentor item #3 (additive): new fields alongside the original six
+  // above, which are unchanged. geometric_mean/skewness/cv can be null
+  // when their mathematical preconditions aren't met (non-positive
+  // values present, zero std, or zero mean respectively) — see
+  // statistics.py's compute_statistics() for the exact guard logic.
+  median?: number | null;
+  geometric_mean?: number | null;
+  p25?: number | null;
+  p75?: number | null;
+  iqr?: number | null;
+  skewness?: number | null;
+  cv?: number | null;
   file_name?: string;
   variable?: string;
   bbox?: { lat_min: number; lat_max: number; lon_min: number; lon_max: number };
