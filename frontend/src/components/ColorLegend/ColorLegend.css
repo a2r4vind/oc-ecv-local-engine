@@ -18,6 +18,16 @@
   border-radius: var(--oc-radius-sm);
   border: 1px solid var(--oc-border);
 }
+
+.color-legend-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  font-family: var(--oc-font-mono);
+  color: var(--oc-text-secondary);
+  margin-top: 0.15rem;
+}
+
 .color-legend-labels {
   display: flex;
   justify-content: space-between;

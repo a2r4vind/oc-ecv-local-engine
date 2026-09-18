@@ -41,13 +41,20 @@ function niceStep(spanDegrees: number): number {
   return niceResidual * magnitude;
 }
 
-export function buildGraticuleGeoJSON(bounds: ViewBounds): GeoJSON.FeatureCollection {
+export function buildGraticuleGeoJSON(
+  bounds: ViewBounds,
+  stepOverride?: number | null
+): GeoJSON.FeatureCollection {
   const { north, south, east, west } = bounds;
   const latSpan = Math.max(north - south, 0.0001);
   const lonSpan = Math.max(east - west, 0.0001);
-  const step = Math.max(niceStep(latSpan), niceStep(lonSpan));
+  // Mentor item #2: a positive manual override bypasses the "nice
+  // step" auto-computation entirely; null/undefined/<=0 preserves the
+  // original auto behavior exactly.
+  const step = stepOverride && stepOverride > 0 ? stepOverride : Math.max(niceStep(latSpan), niceStep(lonSpan));
 
   const features: GeoJSON.Feature[] = [];
+
 
   const startLat = Math.floor(south / step) * step;
   for (let lat = startLat; lat <= north + step; lat += step) {
@@ -89,11 +96,15 @@ export function buildGraticuleGeoJSON(bounds: ViewBounds): GeoJSON.FeatureCollec
  * NASA Giovanni's own graticule label placement. Offset slightly inward
  * from the raw edge so labels aren't clipped by the map container.
  */
-export function buildGraticuleLabelsGeoJSON(bounds: ViewBounds): GeoJSON.FeatureCollection {
+ 
+ export function buildGraticuleLabelsGeoJSON(
+  bounds: ViewBounds,
+  stepOverride?: number | null
+): GeoJSON.FeatureCollection {
   const { north, south, east, west } = bounds;
   const latSpan = Math.max(north - south, 0.0001);
   const lonSpan = Math.max(east - west, 0.0001);
-  const step = Math.max(niceStep(latSpan), niceStep(lonSpan));
+  const step = stepOverride && stepOverride > 0 ? stepOverride : Math.max(niceStep(latSpan), niceStep(lonSpan));
   const latInset = latSpan * 0.04;
   const lonInset = lonSpan * 0.04;
 
@@ -123,9 +134,13 @@ export function buildGraticuleLabelsGeoJSON(bounds: ViewBounds): GeoJSON.Feature
   return { type: "FeatureCollection", features };
 }
 
-export function addOrUpdateGraticule(map: MaplibreMap, bounds: ViewBounds): void {
-  const lineData = buildGraticuleGeoJSON(bounds);
-  const labelData = buildGraticuleLabelsGeoJSON(bounds);
+export function addOrUpdateGraticule(
+  map: MaplibreMap,
+  bounds: ViewBounds,
+  stepOverride?: number | null
+): void {
+  const lineData = buildGraticuleGeoJSON(bounds, stepOverride);
+  const labelData = buildGraticuleLabelsGeoJSON(bounds, stepOverride);
 
   const existingLines = map.getSource(GRATICULE_SOURCE_ID) as GeoJSONSource | undefined;
   if (existingLines) {

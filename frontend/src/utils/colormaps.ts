@@ -57,14 +57,57 @@ export function getGradientCss(name: ColormapName): string {
   return `linear-gradient(to right, ${stopStrings.join(", ")})`;
 }
 
+/** Mentor item #1: value boundaries between each discrete color band, in
+ * the variable's own physical units -- used to label the legend when
+ * stepping is active. Empty array means "continuous" (steps <= 1). */
+export function getStepBoundaries(valueMin: number, valueMax: number, steps: number): number[] {
+  if (!steps || steps <= 1) return [];
+  const boundaries: number[] = [];
+  for (let i = 0; i <= steps; i++) {
+    boundaries.push(valueMin + (i / steps) * (valueMax - valueMin));
+  }
+  return boundaries;
+}
+
+/** Hard-edged (banded) CSS gradient for the legend bar when stepping is
+ * active, built from the same getColor() quantization used for actual
+ * rendering -- guarantees the legend can never visually disagree with
+ * the map, same principle as getGradientCss() for the continuous case. */
+export function getSteppedGradientCss(name: ColormapName, steps: number): string {
+  if (!steps || steps <= 1) return getGradientCss(name);
+  const bands: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const midpointT = (i + 0.5) / steps;
+    const [r, g, b] = getColor(name, midpointT, steps);
+    const pct0 = ((i / steps) * 100).toFixed(2);
+    const pct1 = (((i + 1) / steps) * 100).toFixed(2);
+    bands.push(`rgb(${r}, ${g}, ${b}) ${pct0}%`, `rgb(${r}, ${g}, ${b}) ${pct1}%`);
+  }
+  return `linear-gradient(to right, ${bands.join(", ")})`;
+} 
+
 function lerp(a: number, b: number, f: number): number {
   return a + (b - a) * f;
 }
 
-/** Looks up an interpolated RGB color for normalized value t (0-1). */
-export function getColor(name: ColormapName, t: number): [number, number, number] {
+/** Quantizes normalized value t (0-1) into `steps` discrete levels. A
+ * steps value of 0 or 1 disables quantization (continuous gradient) --
+ * the existing default, so every pre-existing call site is unaffected
+ * unless it explicitly opts into stepping. */
+function quantizeT(t: number, steps: number): number {
+  if (!steps || steps <= 1) return t;
+  const level = Math.min(steps - 1, Math.floor(t * steps));
+  return level / (steps - 1);
+}
+
+/** Looks up an interpolated RGB color for normalized value t (0-1).
+ * Optional `steps` (mentor item #1, "adjustable increments") quantizes
+ * into that many discrete color bands instead of a smooth gradient;
+ * omitted or 0/1 preserves the original continuous behavior. */
+export function getColor(name: ColormapName, t: number, steps: number = 0): [number, number, number] {
   const stops = COLORMAPS[name];
-  const clamped = Math.min(1, Math.max(0, t));
+  const clamped = quantizeT(Math.min(1, Math.max(0, t)), steps);
+
 
   for (let i = 0; i < stops.length - 1; i++) {
     const a = stops[i];
@@ -94,7 +137,8 @@ export function getColor(name: ColormapName, t: number): [number, number, number
  */
 export function recolorBitmap(
   source: ImageBitmap,
-  colormap: ColormapName
+  colormap: ColormapName,
+  steps: number = 0
 ): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = source.width;
@@ -112,7 +156,7 @@ export function recolorBitmap(
     const alpha = data[i + 3];
     if (alpha === 0) continue; // masked pixel — leave fully transparent, skip recoloring
     const luminance = data[i]; // R channel; G/B are identical copies from LA decode
-    const [r, g, b] = getColor(colormap, luminance / 255);
+    const [r, g, b] = getColor(colormap, luminance / 255, steps);
     data[i] = r;
     data[i + 1] = g;
     data[i + 2] = b;

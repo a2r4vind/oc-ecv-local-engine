@@ -19,6 +19,10 @@ interface MapToolbarProps {
   onPan: (direction: PanDirection) => void;
   graticuleOn: boolean;
   onToggleGraticule: () => void;
+  // Mentor item #2: null = auto ("nice step"), otherwise a manual
+  // degree spacing for the grid lines.
+  graticuleStepDeg: number | null;
+  onGraticuleStepChange: (step: number | null) => void;
 }
 
 export function MapToolbar({
@@ -29,6 +33,8 @@ export function MapToolbar({
   onPan,
   graticuleOn,
   onToggleGraticule,
+  graticuleStepDeg,
+  onGraticuleStepChange,
 }: MapToolbarProps) {
   return (
     <div className="map-toolbar" role="toolbar" aria-label="Map controls">
@@ -107,6 +113,27 @@ export function MapToolbar({
         >
           <GridIcon />
         </button>
+        {graticuleOn && (
+          <input
+            type="number"
+            className="map-toolbar-step-input"
+            style={{ width: "52px" }}
+            min={0}
+            step={0.5}
+            placeholder="Auto"
+            title="Grid spacing in degrees — empty or 0 = auto"
+            value={graticuleStepDeg ?? ""}
+            onChange={(e) => {
+              const raw = e.target.value;
+              if (raw === "") {
+                onGraticuleStepChange(null);
+                return;
+              }
+              const v = parseFloat(raw);
+              onGraticuleStepChange(Number.isFinite(v) && v > 0 ? Math.min(90, v) : null);
+            }}
+          />
+        )}
       </div>
     </div>
   );
